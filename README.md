@@ -2,6 +2,8 @@
 
 `server-gui` is a desktop wrapper for an existing Minecraft server. Drop it into a normal server folder, launch it once, and it will detect common server jars, build the default launch command, and write `server-wrapper.properties` for you.
 
+![Mock UI screenshot](docs/images/mock-ui.png)
+
 ## Installation
 
 1. Copy `server-gui-0.1.0.jar` from `target/` into your server folder.
