@@ -12,15 +12,20 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.Frame;
 import java.awt.FontMetrics;
 import java.awt.FlowLayout;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.Image;
 import java.awt.KeyboardFocusManager;
 import java.awt.Taskbar;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
@@ -35,8 +40,11 @@ import javax.swing.BoxLayout;
 import javax.swing.DefaultListModel;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JComponent;
+import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JList;
+import javax.swing.JLayeredPane;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollBar;
@@ -66,10 +74,24 @@ public final class MainFrame extends JFrame {
     private JTable logTable;
     private JScrollPane logScrollPane;
     private TableRowSorter<LogTableModel> logSorter;
+    private AppConfig config;
+    private JSplitPane mainSplitPane;
+    private JSplitPane rightTopSplitPane;
+    private JSplitPane rightBottomSplitPane;
+    private JPanel logToolbarPanel;
+    private MinecraftFilterToggleButton logToolbarToggleButton;
+    private boolean logToolbarVisible;
+    private boolean autoScrollEnabled = true;
+    private boolean internalScrollChange;
+    private boolean manualScrollInProgress;
+    private ServerStatus currentStatus = ServerStatus.OFFLINE;
 
     private final MinecraftTextField searchField = new MinecraftTextField("Search", 26, CONTROL_FONT_SCALE);
     private final MinecraftTextField commandField = new MinecraftTextField("Enter command", 32, CONTROL_FONT_SCALE);
     private final MinecraftLabel statusLabel = new MinecraftLabel("Offline", CONTROL_FONT_SCALE);
+    private final MinecraftLabel titleLabel;
+    private final MinecraftLabel subtitleLabel;
+    private final MinecraftLinkButton settingsButton = new MinecraftLinkButton("Edit");
 
     private final MinecraftButton startButton = new MinecraftButton("Start", CONTROL_FONT_SCALE);
     private final MinecraftButton stopButton = new MinecraftButton("Stop", CONTROL_FONT_SCALE);
@@ -88,7 +110,10 @@ public final class MainFrame extends JFrame {
 
     public MainFrame(AppConfig config) {
         super(config.appTitle());
+        this.config = config;
         this.controller = new ServerController(config);
+        this.titleLabel = new MinecraftLabel(config.appTitle(), 3);
+        this.subtitleLabel = new MinecraftLabel(config.mockMode() ? "mock mode" : config.workingDirectory().toString(), 2);
 
         patchDefaults();
         setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
@@ -101,6 +126,7 @@ public final class MainFrame extends JFrame {
     }
 
     public void autoStart() {
+        autoScrollEnabled = true;
         controller.start();
     }
 
@@ -110,7 +136,7 @@ public final class MainFrame extends JFrame {
             protected void paintComponent(Graphics graphics) {
                 super.paintComponent(graphics);
                 Graphics2D g2 = (Graphics2D) graphics.create();
-                MinecraftTheme.paintTiledBackground(g2, MinecraftTheme.WINDOW_BG, 0, 0, getWidth(), getHeight(), 1f);
+                MinecraftTheme.paintTiledBackground(g2, MinecraftTheme.LIST_BG, 0, 0, getWidth(), getHeight(), 1f);
                 g2.dispose();
             }
         };
@@ -132,21 +158,25 @@ public final class MainFrame extends JFrame {
         JPanel metaRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         metaRow.setOpaque(false);
 
-        MinecraftLabel title = new MinecraftLabel(config.appTitle(), 3);
-        title.setSmallCaps(true);
-        MinecraftLabel subtitle = new MinecraftLabel(config.mockMode() ? "mock mode" : config.workingDirectory().toString(), 2);
-        subtitle.setPixelColor(MinecraftTheme.TEXT_MUTED);
-        subtitle.setShadow(false);
+        titleLabel.setSmallCaps(true);
+        subtitleLabel.setPixelColor(MinecraftTheme.TEXT_MUTED);
+        subtitleLabel.setShadow(false);
         statusLabel.setSmallCaps(true);
+        settingsButton.addActionListener(e -> openSettingsDialog());
 
         JPanel titleRow = new JPanel(new FlowLayout(FlowLayout.LEFT, MinecraftTheme.scale(8), 0));
         titleRow.setOpaque(false);
-        titleRow.add(title);
+        titleRow.add(titleLabel);
         titleRow.add(buildStatusPanel());
+
+        JPanel subtitleRow = new JPanel(new FlowLayout(FlowLayout.LEFT, MinecraftTheme.scale(8), 0));
+        subtitleRow.setOpaque(false);
+        subtitleRow.add(subtitleLabel);
+        subtitleRow.add(settingsButton);
 
         titles.add(titleRow);
         titles.add(Box.createVerticalStrut(MinecraftTheme.scale(4)));
-        titles.add(subtitle);
+        titles.add(subtitleRow);
 
         JPanel controls = new JPanel(new FlowLayout(FlowLayout.RIGHT, MinecraftTheme.scale(8), 0));
         controls.setOpaque(false);
@@ -170,38 +200,14 @@ public final class MainFrame extends JFrame {
     private Component buildCenter() {
         buildLogTable();
 
-        JPanel left = new JPanel(new BorderLayout(0, 8));
-        left.setOpaque(false);
-        left.add(buildLogToolbar(), BorderLayout.NORTH);
-        left.add(logScrollPane, BorderLayout.CENTER);
-
-        JPanel right = new JPanel();
-        right.setOpaque(false);
-        right.setLayout(new BoxLayout(right, BoxLayout.Y_AXIS));
+        JComponent left = buildLogArea();
 
         JComponent players = buildPlayersCard();
-        players.setAlignmentX(Component.LEFT_ALIGNMENT);
-        tpsChart.setAlignmentX(Component.LEFT_ALIGNMENT);
-        heapChart.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        right.add(players);
-        right.add(Box.createVerticalStrut(MinecraftTheme.scale(8)));
-        right.add(tpsChart);
-        right.add(Box.createVerticalStrut(MinecraftTheme.scale(8)));
-        right.add(heapChart);
-        right.add(Box.createVerticalGlue());
-
         updateUiScale();
-
-        JScrollPane rightScroll = new JScrollPane(right);
-        styleScrollPane(rightScroll);
-
-        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, left, rightScroll);
-        split.setResizeWeight(0.73);
-        split.setDividerSize(MinecraftTheme.scale(6));
-        split.setOpaque(false);
-        split.setBorder(null);
-        return split;
+        rightBottomSplitPane = buildSplitPane(JSplitPane.VERTICAL_SPLIT, tpsChart, heapChart, 0.5);
+        rightTopSplitPane = buildSplitPane(JSplitPane.VERTICAL_SPLIT, players, rightBottomSplitPane, 0.45);
+        mainSplitPane = buildSplitPane(JSplitPane.HORIZONTAL_SPLIT, left, rightTopSplitPane, 0.73);
+        return mainSplitPane;
     }
 
     private void buildLogTable() {
@@ -244,12 +250,46 @@ public final class MainFrame extends JFrame {
         styleScrollPane(logScrollPane);
         logScrollPane.getViewport().setOpaque(false);
         logScrollPane.setViewportView(logTable);
+        JScrollBar bar = logScrollPane.getVerticalScrollBar();
+        logScrollPane.addMouseWheelListener(event -> {
+            if (currentStatus != ServerStatus.ONLINE) return;
+            SwingUtilities.invokeLater(() -> autoScrollEnabled = isAtBottom(bar));
+        });
+        bar.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                if (currentStatus == ServerStatus.ONLINE) {
+                    manualScrollInProgress = true;
+                }
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                if (currentStatus == ServerStatus.ONLINE) {
+                    manualScrollInProgress = false;
+                    autoScrollEnabled = isAtBottom(bar);
+                }
+            }
+        });
+        bar.addAdjustmentListener(event -> {
+            if (internalScrollChange) return;
+            if (currentStatus != ServerStatus.ONLINE) {
+                autoScrollEnabled = true;
+                return;
+            }
+            if (isAtBottom(bar)) {
+                autoScrollEnabled = true;
+            } else if (manualScrollInProgress) {
+                autoScrollEnabled = false;
+            }
+        });
     }
 
     private void styleScrollPane(JScrollPane scrollPane) {
         scrollPane.setOpaque(false);
         scrollPane.getViewport().setOpaque(false);
-        scrollPane.setBorder(BorderFactory.createMatteBorder(1, 1, 1, 1, MinecraftTheme.TEXT_DARK));
+        int stroke = Math.max(2, MinecraftTheme.scale(2));
+        scrollPane.setBorder(BorderFactory.createMatteBorder(stroke, stroke, stroke, stroke, MinecraftTheme.BORDER_LIGHT));
         scrollPane.getVerticalScrollBar().setUI(new MinecraftScrollBarUI());
         scrollPane.getHorizontalScrollBar().setUI(new MinecraftScrollBarUI());
         scrollPane.getVerticalScrollBar().setUnitIncrement(MinecraftTheme.scale(16));
@@ -263,11 +303,68 @@ public final class MainFrame extends JFrame {
         return bar;
     }
 
+    private JComponent buildLogArea() {
+        logToolbarPanel = (JPanel) buildLogToolbar();
+        logToolbarPanel.setVisible(logToolbarVisible);
+        logToolbarToggleButton = new MinecraftFilterToggleButton();
+        logToolbarToggleButton.addActionListener(e -> toggleLogToolbar());
+
+        JLayeredPane layeredPane = new JLayeredPane() {
+            @Override
+            public Dimension getPreferredSize() {
+                return logScrollPane.getPreferredSize();
+            }
+
+            @Override
+            public void doLayout() {
+                int width = getWidth();
+                int height = getHeight();
+                int inset = MinecraftTheme.scale(4);
+                int toolbarGap = MinecraftTheme.scale(6);
+                int buttonWidth = logToolbarToggleButton.getPreferredSize().width;
+                int buttonHeight = logToolbarToggleButton.getPreferredSize().height;
+                int buttonX = width - buttonWidth - inset;
+                int buttonY = inset;
+                logToolbarToggleButton.setBounds(buttonX, buttonY, buttonWidth, buttonHeight);
+
+                int toolbarHeight = logToolbarVisible ? logToolbarPanel.getPreferredSize().height : 0;
+                if (logToolbarVisible) {
+                    logToolbarPanel.setBounds(inset, inset, Math.max(0, width - buttonWidth - (inset * 3)), toolbarHeight);
+                    logScrollPane.setBounds(0, toolbarHeight + toolbarGap + inset, width, Math.max(0, height - toolbarHeight - toolbarGap - inset));
+                } else {
+                    logToolbarPanel.setBounds(inset, inset, Math.max(0, width - buttonWidth - (inset * 3)), 0);
+                    logScrollPane.setBounds(0, 0, width, height);
+                }
+            }
+        };
+        layeredPane.setOpaque(false);
+        layeredPane.add(logScrollPane, Integer.valueOf(0));
+        layeredPane.add(logToolbarPanel, Integer.valueOf(1));
+        layeredPane.add(logToolbarToggleButton, Integer.valueOf(2));
+        return layeredPane;
+    }
+
+    private void toggleLogToolbar() {
+        logToolbarVisible = !logToolbarVisible;
+        if (logToolbarPanel != null) logToolbarPanel.setVisible(logToolbarVisible);
+        if (logToolbarPanel != null) {
+            logToolbarPanel.revalidate();
+            logToolbarPanel.repaint();
+        }
+        if (logToolbarToggleButton != null) {
+            logToolbarToggleButton.repaint();
+        }
+        if (logScrollPane != null && logScrollPane.getParent() != null) {
+            logScrollPane.getParent().revalidate();
+            logScrollPane.getParent().repaint();
+        }
+    }
+
     private MinecraftButton buildFilterButton() {
         MinecraftButton button = new MinecraftButton("Filter", CONTROL_FONT_SCALE);
 
         JPopupMenu popup = new JPopupMenu();
-        popup.setBorder(BorderFactory.createMatteBorder(1, 1, 1, 1, MinecraftTheme.TEXT_DARK));
+        popup.setBorder(BorderFactory.createMatteBorder(1, 1, 1, 1, MinecraftTheme.BORDER_LIGHT));
         popup.setBackground(MinecraftTheme.BG);
 
         popup.add(checkItem("Info", Level.INFO, null, MinecraftTheme.INFO));
@@ -283,7 +380,7 @@ public final class MainFrame extends JFrame {
     }
 
     private JCheckBoxMenuItem checkItem(String text, Level level, Category category, Color color) {
-        JCheckBoxMenuItem item = new JCheckBoxMenuItem(text, true);
+        JCheckBoxMenuItem item = new MinecraftCheckBoxMenuItem(text, true, color);
         item.setForeground(color);
         item.setBackground(MinecraftTheme.BG);
         item.addActionListener(e -> {
@@ -325,6 +422,17 @@ public final class MainFrame extends JFrame {
         content.add(scroller, BorderLayout.CENTER);
         panel.add(content, BorderLayout.CENTER);
         return panel;
+    }
+
+    private JSplitPane buildSplitPane(int orientation, Component first, Component second, double resizeWeight) {
+        JSplitPane split = new JSplitPane(orientation, first, second);
+        split.setResizeWeight(resizeWeight);
+        split.setDividerSize(MinecraftTheme.scale(6));
+        split.setOpaque(false);
+        split.setBorder(null);
+        split.setContinuousLayout(true);
+        split.setUI(new MinecraftSplitPaneUI());
+        return split;
     }
 
     private JComponent buildFooter() {
@@ -417,8 +525,10 @@ public final class MainFrame extends JFrame {
     private void updateHeap(HeapSample sample) { heapChart.addPoint(sample.usedMb(), sample.totalMb()); }
 
     private void updateStatus(ServerStatus status) {
+        currentStatus = status;
         switch (status) {
             case LOADING -> {
+                autoScrollEnabled = true;
                 statusLabel.setPixelText("Loading");
                 statusLabel.setPixelColor(MinecraftTheme.WARN);
                 startButton.setEnabled(false);
@@ -427,14 +537,17 @@ public final class MainFrame extends JFrame {
                 killButton.setEnabled(true);
             }
             case ONLINE -> {
+                autoScrollEnabled = true;
                 statusLabel.setPixelText("Online");
                 statusLabel.setPixelColor(MinecraftTheme.SUCCESS);
                 startButton.setEnabled(false);
                 stopButton.setEnabled(true);
                 restartButton.setEnabled(true);
                 killButton.setEnabled(true);
+                scrollToBottom();
             }
             case OFFLINE -> {
+                autoScrollEnabled = true;
                 statusLabel.setPixelText("Offline");
                 statusLabel.setPixelColor(MinecraftTheme.ERROR);
                 startButton.setEnabled(true);
@@ -442,6 +555,25 @@ public final class MainFrame extends JFrame {
                 restartButton.setEnabled(false);
                 killButton.setEnabled(false);
             }
+        }
+        if (status != ServerStatus.ONLINE) {
+            scrollToBottom();
+        }
+    }
+
+    private void openSettingsDialog() {
+        SettingsDialog dialog = new SettingsDialog(this, config);
+        dialog.setVisible(true);
+    }
+
+    private void applySettings(AppConfig updatedConfig, boolean restartServer) {
+        this.config = updatedConfig;
+        controller.reconfigure(updatedConfig);
+        setTitle(updatedConfig.appTitle());
+        titleLabel.setPixelText(updatedConfig.appTitle());
+        subtitleLabel.setPixelText(updatedConfig.mockMode() ? "mock mode" : updatedConfig.workingDirectory().toString());
+        if (restartServer && controller.isRunning()) {
+            controller.restart();
         }
     }
 
@@ -461,23 +593,35 @@ public final class MainFrame extends JFrame {
                 return true;
             }
         });
-        scrollToBottom();
+        if (logScrollPane != null && (autoScrollEnabled || isAtBottom(logScrollPane.getVerticalScrollBar()))) {
+            scrollToBottom();
+        }
     }
 
     private void maybeScrollToBottom() {
         if (logScrollPane == null) return;
-        JScrollBar bar = logScrollPane.getVerticalScrollBar();
-        if (bar.getValue() + bar.getVisibleAmount() >= bar.getMaximum() - 40) {
+        if (autoScrollEnabled) {
             scrollToBottom();
         }
     }
 
     private void scrollToBottom() {
-        if (logTable == null) return;
+        if (logTable == null || logScrollPane == null) return;
         SwingUtilities.invokeLater(() -> {
             int last = logTable.getRowCount() - 1;
-            if (last >= 0) logTable.scrollRectToVisible(logTable.getCellRect(last, 0, true));
+            if (last >= 0) {
+                internalScrollChange = true;
+                logTable.scrollRectToVisible(logTable.getCellRect(last, 0, true));
+                JScrollBar bar = logScrollPane.getVerticalScrollBar();
+                bar.setValue(bar.getMaximum());
+                autoScrollEnabled = true;
+                internalScrollChange = false;
+            }
         });
+    }
+
+    private boolean isAtBottom(JScrollBar bar) {
+        return bar.getValue() + bar.getVisibleAmount() >= bar.getMaximum() - MinecraftTheme.scale(4);
     }
 
     private void installWindowIcons() {
@@ -508,6 +652,9 @@ public final class MainFrame extends JFrame {
         heapChart.setPreferredSize(new Dimension(MinecraftTheme.scale(320), MinecraftTheme.scale(160)));
         tpsChart.setMaximumSize(new Dimension(Integer.MAX_VALUE, MinecraftTheme.scale(160)));
         heapChart.setMaximumSize(new Dimension(Integer.MAX_VALUE, MinecraftTheme.scale(160)));
+        if (mainSplitPane != null) mainSplitPane.setDividerSize(MinecraftTheme.scale(6));
+        if (rightTopSplitPane != null) rightTopSplitPane.setDividerSize(MinecraftTheme.scale(6));
+        if (rightBottomSplitPane != null) rightBottomSplitPane.setDividerSize(MinecraftTheme.scale(6));
         setMinimumSize(new Dimension(MinecraftTheme.scale(1240), MinecraftTheme.scale(800)));
         if (getContentPane() instanceof JComponent component) {
             component.setBorder(new EmptyBorder(MinecraftTheme.scale(12), MinecraftTheme.scale(12), MinecraftTheme.scale(12), MinecraftTheme.scale(12)));
@@ -708,4 +855,178 @@ public final class MainFrame extends JFrame {
     }
 
     private record WrappedLine(List<AnsiUtil.Segment> segments) {}
+
+    private final class SettingsDialog extends JDialog {
+        private final MinecraftTextField titleField;
+        private final MinecraftTextField playersPollField;
+        private final MinecraftTextField tpsPollField;
+        private final MinecraftTextField memoryPollField;
+        private final MinecraftTextField minHeapField;
+        private final MinecraftTextField maxHeapField;
+        private final MinecraftButton applyButton = new MinecraftButton("Apply", CONTROL_FONT_SCALE);
+        private final MinecraftButton applyRestartButton = new MinecraftButton("Apply and Restart", CONTROL_FONT_SCALE);
+        private final MinecraftButton cancelButton = new MinecraftButton("Cancel", CONTROL_FONT_SCALE);
+        private final MinecraftLabel noteLabel = new MinecraftLabel("polls apply now, heap changes need restart", 1);
+
+        private SettingsDialog(Frame owner, AppConfig config) {
+            super(owner, "Settings", true);
+            this.titleField = new MinecraftTextField("Window name", 24, CONTROL_FONT_SCALE);
+            this.playersPollField = new MinecraftTextField("seconds", 8, CONTROL_FONT_SCALE);
+            this.tpsPollField = new MinecraftTextField("seconds", 8, CONTROL_FONT_SCALE);
+            this.memoryPollField = new MinecraftTextField("seconds", 8, CONTROL_FONT_SCALE);
+            this.minHeapField = new MinecraftTextField("3G", 8, CONTROL_FONT_SCALE);
+            this.maxHeapField = new MinecraftTextField("6G", 8, CONTROL_FONT_SCALE);
+
+            titleField.setText(config.appTitle());
+            playersPollField.setText(String.valueOf(config.playerPollSeconds()));
+            tpsPollField.setText(String.valueOf(config.tpsPollSeconds()));
+            memoryPollField.setText(String.valueOf(config.heapPollSeconds()));
+            minHeapField.setText(config.minHeap());
+            maxHeapField.setText(config.maxHeap());
+            noteLabel.setPixelColor(MinecraftTheme.TEXT_MUTED);
+            noteLabel.setShadow(false);
+
+            playersPollField.getDocument().addDocumentListener(SimpleDocumentListener.onChange(this::refreshActions));
+            tpsPollField.getDocument().addDocumentListener(SimpleDocumentListener.onChange(this::refreshActions));
+            memoryPollField.getDocument().addDocumentListener(SimpleDocumentListener.onChange(this::refreshActions));
+            minHeapField.getDocument().addDocumentListener(SimpleDocumentListener.onChange(this::refreshActions));
+            maxHeapField.getDocument().addDocumentListener(SimpleDocumentListener.onChange(this::refreshActions));
+            titleField.getDocument().addDocumentListener(SimpleDocumentListener.onChange(this::refreshActions));
+
+            setContentPane(buildContent());
+            refreshActions();
+            pack();
+            setMinimumSize(new Dimension(MinecraftTheme.scale(560), MinecraftTheme.scale(420)));
+            setLocationRelativeTo(owner);
+        }
+
+        private JComponent buildContent() {
+            MinecraftPanel root = new MinecraftPanel(true, 0.97f);
+            root.setBorder(new EmptyBorder(MinecraftTheme.scale(12), MinecraftTheme.scale(12), MinecraftTheme.scale(12), MinecraftTheme.scale(12)));
+
+            JPanel form = new JPanel(new GridBagLayout());
+            form.setOpaque(false);
+            GridBagConstraints gbc = new GridBagConstraints();
+            gbc.gridx = 0;
+            gbc.gridy = 0;
+            gbc.anchor = GridBagConstraints.WEST;
+            gbc.fill = GridBagConstraints.HORIZONTAL;
+            gbc.weightx = 0;
+            gbc.insets = new java.awt.Insets(0, 0, MinecraftTheme.scale(8), MinecraftTheme.scale(10));
+
+            addField(form, gbc, "Name", titleField);
+            addField(form, gbc, "Poll players", playersPollField, "seconds");
+            addField(form, gbc, "Poll TPS", tpsPollField, "seconds");
+            addField(form, gbc, "Poll memory", memoryPollField, "seconds");
+            addField(form, gbc, "Min heap", minHeapField);
+            addField(form, gbc, "Max heap", maxHeapField);
+
+            JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, MinecraftTheme.scale(8), 0));
+            actions.setOpaque(false);
+            applyButton.addActionListener(e -> save(false));
+            applyRestartButton.addActionListener(e -> save(true));
+            cancelButton.addActionListener(e -> dispose());
+            actions.add(cancelButton);
+            actions.add(applyButton);
+            actions.add(applyRestartButton);
+
+            JPanel footer = new JPanel(new BorderLayout(0, MinecraftTheme.scale(8)));
+            footer.setOpaque(false);
+            footer.add(noteLabel, BorderLayout.NORTH);
+            footer.add(actions, BorderLayout.SOUTH);
+
+            root.add(form, BorderLayout.CENTER);
+            root.add(footer, BorderLayout.SOUTH);
+            return root;
+        }
+
+        private void addField(JPanel form, GridBagConstraints gbc, String labelText, JComponent field) {
+            addField(form, gbc, labelText, field, null);
+        }
+
+        private void addField(JPanel form, GridBagConstraints gbc, String labelText, JComponent field, String suffixText) {
+            MinecraftLabel label = new MinecraftLabel(labelText, 2);
+            label.setSmallCaps(true);
+            gbc.gridx = 0;
+            gbc.weightx = 0;
+            form.add(label, gbc);
+            gbc.gridx = 1;
+            gbc.weightx = 1;
+            form.add(field, gbc);
+            if (suffixText != null) {
+                MinecraftLabel suffix = new MinecraftLabel(suffixText, 2);
+                suffix.setPixelColor(MinecraftTheme.TEXT_MUTED);
+                suffix.setShadow(false);
+                gbc.gridx = 2;
+                gbc.weightx = 0;
+                form.add(suffix, gbc);
+            }
+            gbc.gridy++;
+        }
+
+        private void save(boolean restartServer) {
+            try {
+                String appTitle = requireText(titleField.getText(), "Name");
+                int playerPoll = parseNonNegative(playersPollField.getText(), "Poll players");
+                int tpsPoll = parseNonNegative(tpsPollField.getText(), "Poll TPS");
+                int memoryPoll = parseNonNegative(memoryPollField.getText(), "Poll memory");
+                String minHeap = requireText(minHeapField.getText(), "Min heap");
+                String maxHeap = requireText(maxHeapField.getText(), "Max heap");
+                validateHeap(minHeap, maxHeap);
+
+                AppConfig updated = config.save(appTitle, playerPoll, tpsPoll, memoryPoll, minHeap, maxHeap);
+                applySettings(updated, restartServer);
+                dispose();
+            } catch (IllegalArgumentException exception) {
+                JOptionPane.showMessageDialog(this, exception.getMessage(), "Invalid settings", JOptionPane.ERROR_MESSAGE);
+            } catch (IllegalStateException exception) {
+                JOptionPane.showMessageDialog(this, exception.getMessage(), "Save failed", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+
+        private String requireText(String value, String name) {
+            String trimmed = value == null ? "" : value.trim();
+            if (trimmed.isBlank()) throw new IllegalArgumentException(name + " cannot be blank.");
+            return trimmed;
+        }
+
+        private int parseNonNegative(String value, String name) {
+            try {
+                int parsed = Integer.parseInt(requireText(value, name));
+                if (parsed < 0) throw new IllegalArgumentException(name + " must be 0 or greater.");
+                return parsed;
+            } catch (NumberFormatException exception) {
+                throw new IllegalArgumentException(name + " must be a whole number.");
+            }
+        }
+
+        private void validateHeap(String minHeap, String maxHeap) {
+            long minMb = parseHeapMb(minHeap, "Min heap");
+            long maxMb = parseHeapMb(maxHeap, "Max heap");
+            if (minMb > maxMb) {
+                throw new IllegalArgumentException("Min heap cannot be larger than max heap.");
+            }
+        }
+
+        private long parseHeapMb(String value, String name) {
+            String trimmed = requireText(value, name).toUpperCase(Locale.ROOT);
+            if (!trimmed.matches("\\d+[KMG]")) {
+                throw new IllegalArgumentException(name + " must use a number followed by K, M, or G.");
+            }
+            long amount = Long.parseLong(trimmed.substring(0, trimmed.length() - 1));
+            char unit = trimmed.charAt(trimmed.length() - 1);
+            return switch (unit) {
+                case 'G' -> amount * 1024L;
+                case 'M' -> amount;
+                case 'K' -> Math.max(1L, amount / 1024L);
+                default -> throw new IllegalArgumentException(name + " must use K, M, or G.");
+            };
+        }
+
+        private void refreshActions() {
+            boolean heapChanged = !minHeapField.getText().trim().equalsIgnoreCase(config.minHeap())
+                    || !maxHeapField.getText().trim().equalsIgnoreCase(config.maxHeap());
+            applyRestartButton.setEnabled(heapChanged);
+        }
+    }
 }

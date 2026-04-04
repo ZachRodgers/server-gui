@@ -91,6 +91,12 @@ public final class ChartPanel extends JPanel {
             int point = Math.max(2, MinecraftTheme.scale(2));
             g2.fillRect(previousX - (point / 2), previousY - (point / 2), point, point);
         }
+        int stroke = Math.max(2, MinecraftTheme.scale(2));
+        g2.setColor(MinecraftTheme.BORDER_LIGHT);
+        g2.fillRect(0, 0, getWidth(), stroke);
+        g2.fillRect(0, getHeight() - stroke, getWidth(), stroke);
+        g2.fillRect(0, 0, stroke, getHeight());
+        g2.fillRect(getWidth() - stroke, 0, stroke, getHeight());
         g2.dispose();
     }
 

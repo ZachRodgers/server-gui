@@ -4,6 +4,7 @@ import java.awt.Dimension;
 import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.Cursor;
 import javax.swing.JTextField;
 import javax.swing.Timer;
 
@@ -17,6 +18,7 @@ final class MinecraftTextField extends JTextField {
         this.fontScale = fontScale;
         setOpaque(false);
         setBorder(null);
+        setCursor(Cursor.getPredefinedCursor(Cursor.TEXT_CURSOR));
         setCaretColor(new java.awt.Color(0, 0, 0, 0));
         setForeground(new java.awt.Color(0, 0, 0, 0));
         setSelectedTextColor(new java.awt.Color(0, 0, 0, 0));

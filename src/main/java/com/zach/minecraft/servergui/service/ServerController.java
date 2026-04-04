@@ -50,7 +50,7 @@ public final class ServerController {
     // Lines that are purely the server's stdin prompt artifact — suppress them
     private static final Pattern JUNK_PATTERN      = Pattern.compile("^[>\\s]*$");
 
-    private final AppConfig config;
+    private volatile AppConfig config;
     private final ScheduledExecutorService scheduler  = Executors.newScheduledThreadPool(4);
     private final ExecutorService           ioExecutor = Executors.newCachedThreadPool();
     private final Set<String>               players    = ConcurrentHashMap.newKeySet();
@@ -74,6 +74,18 @@ public final class ServerController {
 
     public ServerController(AppConfig config) {
         this.config = Objects.requireNonNull(config);
+    }
+
+    public synchronized void reconfigure(AppConfig config) {
+        this.config = Objects.requireNonNull(config);
+        if (running && !config.mockMode()) {
+            cancelScheduledTasks();
+            schedulePollers();
+        }
+    }
+
+    public boolean isRunning() {
+        return running;
     }
 
     public void onLog(Consumer<LogEntry> l)          { logListener    = l; }

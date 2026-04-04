@@ -18,6 +18,7 @@ final class MinecraftTheme {
     static final Color PANEL_TEXT = new Color(0xFFFFFF);
     static final Color TEXT_MUTED = new Color(0x787878);
     static final Color TEXT_DARK = new Color(0x1B1B1B);
+    static final Color BORDER_LIGHT = new Color(0x565656);
     static final Color INFO = new Color(0xFFFFFF);
     static final Color WARN = new Color(0xFFAA00);
     static final Color ERROR = new Color(0xFF5555);
@@ -37,6 +38,7 @@ final class MinecraftTheme {
     static final BufferedImage WINDOW_BG = load("assets/minecraft/textures/gui/inworld_menu_background.png");
     static final BufferedImage LIST_BG = load("assets/minecraft/textures/gui/menu_list_background.png");
     static final BufferedImage ICON = load("icons/server-gui.png");
+    static final BufferedImage FILTER_ICON = load("icons/filter-toggle.png");
 
     private MinecraftTheme() {}
 

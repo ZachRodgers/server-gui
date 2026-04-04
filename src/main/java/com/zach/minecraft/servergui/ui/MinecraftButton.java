@@ -5,6 +5,7 @@ import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Insets;
+import java.awt.Cursor;
 import javax.swing.JButton;
 
 final class MinecraftButton extends JButton {
@@ -20,6 +21,7 @@ final class MinecraftButton extends JButton {
         setFocusPainted(false);
         setRolloverEnabled(true);
         setMargin(new Insets(0, 0, 0, 0));
+        setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
     }
 
     @Override

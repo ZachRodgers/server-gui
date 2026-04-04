@@ -10,10 +10,14 @@
 /home/Zach/MineCraft/Repos/server-gui/src/main/java/com/zach/minecraft/servergui/ui/LogTableModel.java
 /home/Zach/MineCraft/Repos/server-gui/src/main/java/com/zach/minecraft/servergui/ui/MainFrame.java
 /home/Zach/MineCraft/Repos/server-gui/src/main/java/com/zach/minecraft/servergui/ui/MinecraftButton.java
+/home/Zach/MineCraft/Repos/server-gui/src/main/java/com/zach/minecraft/servergui/ui/MinecraftCheckBoxMenuItem.java
+/home/Zach/MineCraft/Repos/server-gui/src/main/java/com/zach/minecraft/servergui/ui/MinecraftFilterToggleButton.java
 /home/Zach/MineCraft/Repos/server-gui/src/main/java/com/zach/minecraft/servergui/ui/MinecraftFont.java
 /home/Zach/MineCraft/Repos/server-gui/src/main/java/com/zach/minecraft/servergui/ui/MinecraftLabel.java
+/home/Zach/MineCraft/Repos/server-gui/src/main/java/com/zach/minecraft/servergui/ui/MinecraftLinkButton.java
 /home/Zach/MineCraft/Repos/server-gui/src/main/java/com/zach/minecraft/servergui/ui/MinecraftPanel.java
 /home/Zach/MineCraft/Repos/server-gui/src/main/java/com/zach/minecraft/servergui/ui/MinecraftScrollBarUI.java
+/home/Zach/MineCraft/Repos/server-gui/src/main/java/com/zach/minecraft/servergui/ui/MinecraftSplitPaneUI.java
 /home/Zach/MineCraft/Repos/server-gui/src/main/java/com/zach/minecraft/servergui/ui/MinecraftTextField.java
 /home/Zach/MineCraft/Repos/server-gui/src/main/java/com/zach/minecraft/servergui/ui/MinecraftTheme.java
 /home/Zach/MineCraft/Repos/server-gui/src/main/java/com/zach/minecraft/servergui/ui/MinecraftUiFont.java
