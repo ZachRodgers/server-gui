@@ -31,6 +31,7 @@ public record AppConfig(
         if (Files.notExists(configPath)) {
             writeDefault(configPath);
         }
+        ensureLauncherScripts(normalizedBaseDirectory);
 
         Properties properties = new Properties();
         try (InputStream inputStream = Files.newInputStream(configPath)) {
@@ -210,5 +211,49 @@ public record AppConfig(
     private static boolean isWrapperJar(Path path) {
         String name = path.getFileName().toString().toLowerCase(Locale.ROOT);
         return name.startsWith("server-gui") || name.contains("wrapper");
+    }
+
+    private static void ensureLauncherScripts(Path baseDirectory) {
+        writeLauncher(baseDirectory.resolve("start.sh"), shellLauncher());
+        writeLauncher(baseDirectory.resolve("start.bat"), windowsLauncher());
+        try {
+            Path shell = baseDirectory.resolve("start.sh");
+            if (Files.exists(shell)) {
+                shell.toFile().setExecutable(true, false);
+            }
+        } catch (SecurityException ignored) {
+        }
+    }
+
+    private static void writeLauncher(Path path, String content) {
+        try {
+            Files.writeString(path, content);
+        } catch (IOException ignored) {
+        }
+    }
+
+    private static String shellLauncher() {
+        return """
+                #!/bin/bash
+                cd "$(dirname "$0")"
+                JAR="$(ls server-gui*.jar 2>/dev/null | head -n 1)"
+                if [ -z "$JAR" ]; then
+                  echo "server-gui jar not found."
+                  exit 1
+                fi
+                nohup java -jar "$JAR" &>/dev/null &
+                """;
+    }
+
+    private static String windowsLauncher() {
+        return """
+                @echo off
+                cd /d "%~dp0"
+                for %%f in (server-gui*.jar) do (
+                  start "" javaw -jar "%%f"
+                  goto :eof
+                )
+                echo server-gui jar not found.
+                """;
     }
 }
