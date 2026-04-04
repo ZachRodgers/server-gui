@@ -32,6 +32,13 @@ public final class ChartPanel extends JPanel {
         repaint();
     }
 
+    public void clear() {
+        values.clear();
+        latestValue = 0.0;
+        maxValue = 1.0;
+        repaint();
+    }
+
     @Override
     protected void paintComponent(Graphics graphics) {
         super.paintComponent(graphics);

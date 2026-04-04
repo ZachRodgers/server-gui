@@ -524,11 +524,18 @@ public final class MainFrame extends JFrame {
 
     private void updateHeap(HeapSample sample) { heapChart.addPoint(sample.usedMb(), sample.totalMb()); }
 
+    private void clearRuntimePanels() {
+        playerModel.clear();
+        tpsChart.clear();
+        heapChart.clear();
+    }
+
     private void updateStatus(ServerStatus status) {
         currentStatus = status;
         switch (status) {
             case LOADING -> {
                 autoScrollEnabled = true;
+                clearRuntimePanels();
                 statusLabel.setPixelText("Loading");
                 statusLabel.setPixelColor(MinecraftTheme.WARN);
                 startButton.setEnabled(false);
@@ -548,6 +555,7 @@ public final class MainFrame extends JFrame {
             }
             case OFFLINE -> {
                 autoScrollEnabled = true;
+                clearRuntimePanels();
                 statusLabel.setPixelText("Offline");
                 statusLabel.setPixelColor(MinecraftTheme.ERROR);
                 startButton.setEnabled(true);
