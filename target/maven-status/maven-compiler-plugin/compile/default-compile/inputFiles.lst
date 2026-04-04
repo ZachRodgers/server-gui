@@ -9,5 +9,12 @@
 /home/Zach/MineCraft/Repos/server-gui/src/main/java/com/zach/minecraft/servergui/ui/LinuxDesktopIntegration.java
 /home/Zach/MineCraft/Repos/server-gui/src/main/java/com/zach/minecraft/servergui/ui/LogTableModel.java
 /home/Zach/MineCraft/Repos/server-gui/src/main/java/com/zach/minecraft/servergui/ui/MainFrame.java
+/home/Zach/MineCraft/Repos/server-gui/src/main/java/com/zach/minecraft/servergui/ui/MinecraftButton.java
+/home/Zach/MineCraft/Repos/server-gui/src/main/java/com/zach/minecraft/servergui/ui/MinecraftFont.java
+/home/Zach/MineCraft/Repos/server-gui/src/main/java/com/zach/minecraft/servergui/ui/MinecraftLabel.java
+/home/Zach/MineCraft/Repos/server-gui/src/main/java/com/zach/minecraft/servergui/ui/MinecraftPanel.java
+/home/Zach/MineCraft/Repos/server-gui/src/main/java/com/zach/minecraft/servergui/ui/MinecraftScrollBarUI.java
+/home/Zach/MineCraft/Repos/server-gui/src/main/java/com/zach/minecraft/servergui/ui/MinecraftTextField.java
+/home/Zach/MineCraft/Repos/server-gui/src/main/java/com/zach/minecraft/servergui/ui/MinecraftTheme.java
 /home/Zach/MineCraft/Repos/server-gui/src/main/java/com/zach/minecraft/servergui/ui/SimpleDocumentListener.java
 /home/Zach/MineCraft/Repos/server-gui/src/main/java/com/zach/minecraft/servergui/util/AnsiUtil.java

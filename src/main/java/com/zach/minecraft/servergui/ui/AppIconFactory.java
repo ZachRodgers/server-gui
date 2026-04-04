@@ -2,14 +2,9 @@ package com.zach.minecraft.servergui.ui;
 
 import java.awt.Image;
 import java.awt.image.BufferedImage;
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.List;
-import javax.imageio.ImageIO;
 
 final class AppIconFactory {
-    private static final String ICON_RESOURCE = "/icons/server-gui.png";
-
     private AppIconFactory() {}
 
     static List<Image> createIcons() {
@@ -37,17 +32,6 @@ final class AppIconFactory {
     }
 
     private static BufferedImage loadSourceImage() {
-        try (InputStream input = AppIconFactory.class.getResourceAsStream(ICON_RESOURCE)) {
-            if (input == null) {
-                throw new IllegalStateException("Missing icon resource: " + ICON_RESOURCE);
-            }
-            BufferedImage image = ImageIO.read(input);
-            if (image == null) {
-                throw new IllegalStateException("Unreadable icon resource: " + ICON_RESOURCE);
-            }
-            return image;
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to load icon resource: " + ICON_RESOURCE, e);
-        }
+        return MinecraftTheme.ICON;
     }
 }

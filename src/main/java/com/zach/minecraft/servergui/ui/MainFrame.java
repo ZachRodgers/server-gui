@@ -8,18 +8,15 @@ import com.zach.minecraft.servergui.model.LogEntry.Level;
 import com.zach.minecraft.servergui.service.ServerController;
 import com.zach.minecraft.servergui.service.ServerController.ServerStatus;
 import com.zach.minecraft.servergui.util.AnsiUtil;
-import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
-import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.KeyboardFocusManager;
-import java.awt.RenderingHints;
 import java.awt.Taskbar;
 import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
@@ -32,10 +29,9 @@ import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.DefaultListModel;
-import javax.swing.JButton;
 import javax.swing.JCheckBoxMenuItem;
+import javax.swing.JComponent;
 import javax.swing.JFrame;
-import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
@@ -44,81 +40,39 @@ import javax.swing.JScrollPane;
 import javax.swing.JSeparator;
 import javax.swing.JSplitPane;
 import javax.swing.JTable;
-import javax.swing.JTextField;
 import javax.swing.RowFilter;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
-import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.border.EmptyBorder;
+import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableColumnModel;
 import javax.swing.table.TableRowSorter;
 
 public final class MainFrame extends JFrame {
-
-    // ── shadcn/ui dark palette ─────────────────────────────────────────────
-    // zinc-950 / zinc-900 / zinc-800 / zinc-50 / zinc-500
-    static final Color BG          = new Color(0x09090B);  // page background
-    static final Color CARD        = new Color(0x18181B);  // card / raised surface
-    static final Color BORDER      = new Color(0x27272A);  // all borders
-    static final Color MUTED       = new Color(0x27272A);  // muted fill (selection)
-    static final Color TEXT        = new Color(0xFAFAFA);  // primary text
-    static final Color TEXT_MUTED  = new Color(0x71717A);  // secondary / placeholder
-    static final Color TEXT_SEC    = new Color(0xA1A1AA);  // medium text
-
-    // Semantic foregrounds (text only — used for badges and level labels)
-    static final Color FG_GREEN    = new Color(0x4ADE80);  // green-400
-    static final Color FG_AMBER    = new Color(0xFBBF24);  // amber-400
-    static final Color FG_RED      = new Color(0xF87171);  // red-400
-    static final Color FG_ROSE     = new Color(0xFCA5A5);  // rose-300
-
-    // Semantic button fills (very dark tint + colored border)
-    static final Color BTN_GREEN_BG     = new Color(0x052E16);  // green-950
-    static final Color BTN_GREEN_BD     = new Color(0x166534);  // green-800
-    static final Color BTN_RED_BG       = new Color(0x1C0202);  // red-950
-    static final Color BTN_RED_BD       = new Color(0x7F1D1D);  // red-900
-    static final Color BTN_AMBER_BG     = new Color(0x1C1002);  // amber-950
-    static final Color BTN_AMBER_BD     = new Color(0x92400E);  // amber-800
-    static final Color BTN_ROSE_BG      = new Color(0x1C0505);  // rose-950
-    static final Color BTN_ROSE_BD      = new Color(0x881337);  // rose-900
-
-    // Log row tints (barely-there)
-    static final Color WARN_ROW    = new Color(0x15100A);
-    static final Color ERROR_ROW   = new Color(0x150A0A);
-
-    // Level text
-    static final Color WARN_FG     = new Color(0xF59E0B);  // amber-500
-    static final Color ERROR_FG    = new Color(0xEF4444);  // red-500
-    static final Color INFO_FG     = new Color(0x52525B);  // zinc-600
-
-    // ── State ──────────────────────────────────────────────────────────────
     private final ServerController controller;
     private final LogTableModel logModel = new LogTableModel();
     private final DefaultListModel<String> playerModel = new DefaultListModel<>();
 
-    private final Set<Level>    visibleLevels     = EnumSet.allOf(Level.class);
+    private final Set<Level> visibleLevels = EnumSet.allOf(Level.class);
     private final Set<Category> visibleCategories = EnumSet.allOf(Category.class);
 
-    private JTable     logTable;
+    private JTable logTable;
     private JScrollPane logScrollPane;
     private TableRowSorter<LogTableModel> logSorter;
 
-    private final JTextField searchField  = new JTextField();
-    private final JTextField commandField = new JTextField();
+    private final MinecraftTextField searchField = new MinecraftTextField("Search", 26, 2);
+    private final MinecraftTextField commandField = new MinecraftTextField("Enter command", 32, 2);
 
-    private final StatusDot statusDot   = new StatusDot();
-    private final JLabel    statusLabel = new JLabel("OFFLINE");
+    private final MinecraftLabel statusLabel = new MinecraftLabel("OFFLINE", 2);
+    private final MinecraftButton startButton = new MinecraftButton("Start", 2);
+    private final MinecraftButton stopButton = new MinecraftButton("Stop", 2);
+    private final MinecraftButton restartButton = new MinecraftButton("Restart", 2);
+    private final MinecraftButton killButton = new MinecraftButton("Force Kill", 2);
 
-    // Buttons: semantic outline style (tinted bg + colored border + colored text)
-    private final JButton startButton   = outlineBtn("Start",      FG_GREEN, BTN_GREEN_BG, BTN_GREEN_BD);
-    private final JButton stopButton    = outlineBtn("Stop",       FG_RED,   BTN_RED_BG,   BTN_RED_BD);
-    private final JButton restartButton = outlineBtn("Restart",    FG_AMBER, BTN_AMBER_BG, BTN_AMBER_BD);
-    private final JButton killButton    = outlineBtn("Force Kill", FG_ROSE,  BTN_ROSE_BG,  BTN_ROSE_BD);
+    private final ChartPanel tpsChart = new ChartPanel("TPS", "", MinecraftTheme.SUCCESS);
+    private final ChartPanel heapChart = new ChartPanel("Heap", " MB", MinecraftTheme.ERROR);
 
-    private final ChartPanel tpsChart  = new ChartPanel("TPS",  "",    FG_GREEN);
-    private final ChartPanel heapChart = new ChartPanel("Heap", " MB", FG_RED);
-
-    private int logFontSize = 12;
-
-    // ── Constructor ────────────────────────────────────────────────────────
+    private int logFontSize = 16;
 
     public MainFrame(AppConfig config) {
         super(config.appTitle());
@@ -126,7 +80,7 @@ public final class MainFrame extends JFrame {
 
         patchDefaults();
         setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
-        setMinimumSize(new Dimension(1200, 760));
+        setMinimumSize(new Dimension(1240, 800));
         setLocationByPlatform(true);
         installWindowIcons();
         setContentPane(buildUi(config));
@@ -134,78 +88,65 @@ public final class MainFrame extends JFrame {
         installZoomKeys();
     }
 
-    public void autoStart() { controller.start(); }
+    public void autoStart() {
+        controller.start();
+    }
 
-    // ── UI construction ────────────────────────────────────────────────────
-
-    private JPanel buildUi(AppConfig config) {
-        JPanel root = new JPanel(new BorderLayout(0, 0));
-        root.setBackground(BG);
-        root.setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
+    private JComponent buildUi(AppConfig config) {
+        JPanel root = new JPanel(new BorderLayout(0, 10)) {
+            @Override
+            protected void paintComponent(Graphics graphics) {
+                super.paintComponent(graphics);
+                Graphics2D g2 = (Graphics2D) graphics.create();
+                MinecraftTheme.paintTiledBackground(g2, MinecraftTheme.WINDOW_BG, 0, 0, getWidth(), getHeight(), 1f);
+                g2.dispose();
+            }
+        };
+        root.setOpaque(false);
+        root.setBorder(new EmptyBorder(12, 12, 12, 12));
         root.add(buildHeader(config), BorderLayout.NORTH);
-        root.add(buildCenter(),       BorderLayout.CENTER);
-        root.add(buildFooter(),       BorderLayout.SOUTH);
+        root.add(buildCenter(), BorderLayout.CENTER);
+        root.add(buildFooter(), BorderLayout.SOUTH);
         return root;
     }
 
-    private JPanel buildHeader(AppConfig config) {
+    private JComponent buildHeader(AppConfig config) {
+        JPanel top = new JPanel(new BorderLayout());
+        top.setOpaque(false);
+
         JPanel titles = new JPanel();
         titles.setOpaque(false);
         titles.setLayout(new BoxLayout(titles, BoxLayout.Y_AXIS));
-        JLabel title = new JLabel(config.appTitle());
-        title.setFont(title.getFont().deriveFont(Font.BOLD, 18f));
-        title.setForeground(TEXT);
-        JLabel sub = new JLabel(config.mockMode()
-                ? "Mock mode — edit server-wrapper.properties to use a real server"
-                : config.workingDirectory().toString());
-        sub.setFont(sub.getFont().deriveFont(11f));
-        sub.setForeground(TEXT_MUTED);
-        titles.add(title);
-        titles.add(Box.createVerticalStrut(2));
-        titles.add(sub);
 
-        JPanel controls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        MinecraftLabel title = new MinecraftLabel(config.appTitle().toUpperCase(Locale.ROOT), 3);
+        MinecraftLabel subtitle = new MinecraftLabel(
+                (config.mockMode() ? "MOCK MODE" : config.workingDirectory().toString()).toUpperCase(Locale.ROOT),
+                2
+        );
+        subtitle.setPixelColor(MinecraftTheme.TEXT_MUTED);
+
+        titles.add(title);
+        titles.add(Box.createVerticalStrut(4));
+        titles.add(subtitle);
+
+        JPanel controls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
         controls.setOpaque(false);
-        controls.add(buildStatusBadge());
-        controls.add(Box.createHorizontalStrut(4));
+        controls.add(buildStatusPanel());
         controls.add(startButton);
         controls.add(stopButton);
         controls.add(restartButton);
         controls.add(killButton);
 
-        JPanel row = new JPanel(new BorderLayout());
-        row.setOpaque(false);
-        row.add(titles,   BorderLayout.WEST);
-        row.add(controls, BorderLayout.EAST);
-
-        JPanel wrapper = new JPanel(new BorderLayout(0, 12));
-        wrapper.setOpaque(false);
-        wrapper.add(row,    BorderLayout.CENTER);
-        wrapper.add(hRule(), BorderLayout.SOUTH);
-        return wrapper;
+        top.add(titles, BorderLayout.WEST);
+        top.add(controls, BorderLayout.EAST);
+        return top;
     }
 
-    private JPanel buildStatusBadge() {
-        JPanel badge = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0)) {
-            @Override protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(CARD);
-                g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 8, 8);
-                g2.setColor(BORDER);
-                g2.setStroke(new BasicStroke(1f));
-                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 8, 8);
-                g2.dispose();
-            }
-        };
-        badge.setOpaque(false);
-        badge.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
-        statusDot.setPreferredSize(new Dimension(8, 8));
-        statusLabel.setFont(statusLabel.getFont().deriveFont(Font.PLAIN, 12f));
-        statusLabel.setForeground(FG_RED);
-        badge.add(statusDot);
-        badge.add(statusLabel);
-        return badge;
+    private JComponent buildStatusPanel() {
+        MinecraftPanel panel = new MinecraftPanel(true, 0.92f);
+        panel.setBorder(new EmptyBorder(6, 10, 6, 10));
+        panel.add(statusLabel, BorderLayout.CENTER);
+        return panel;
     }
 
     private Component buildCenter() {
@@ -213,209 +154,162 @@ public final class MainFrame extends JFrame {
 
         JPanel left = new JPanel(new BorderLayout(0, 8));
         left.setOpaque(false);
-        left.setBorder(BorderFactory.createEmptyBorder(12, 0, 0, 0));
         left.add(buildLogToolbar(), BorderLayout.NORTH);
-        left.add(logScrollPane,    BorderLayout.CENTER);
+        left.add(logScrollPane, BorderLayout.CENTER);
 
         JPanel right = new JPanel();
         right.setOpaque(false);
         right.setLayout(new BoxLayout(right, BoxLayout.Y_AXIS));
-        right.setBorder(BorderFactory.createEmptyBorder(12, 12, 0, 0));
 
-        JPanel playersCard = buildPlayersCard();
-        playersCard.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JComponent players = buildPlayersCard();
+        players.setAlignmentX(Component.LEFT_ALIGNMENT);
         tpsChart.setAlignmentX(Component.LEFT_ALIGNMENT);
         heapChart.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        right.add(playersCard);
+        right.add(players);
         right.add(Box.createVerticalStrut(8));
         right.add(tpsChart);
         right.add(Box.createVerticalStrut(8));
         right.add(heapChart);
         right.add(Box.createVerticalGlue());
 
-        tpsChart.setPreferredSize(new Dimension(300, 148));
-        tpsChart.setMinimumSize(new Dimension(200, 120));
-        tpsChart.setMaximumSize(new Dimension(Short.MAX_VALUE, 148));
-        heapChart.setPreferredSize(new Dimension(300, 148));
-        heapChart.setMinimumSize(new Dimension(200, 120));
-        heapChart.setMaximumSize(new Dimension(Short.MAX_VALUE, 148));
+        tpsChart.setPreferredSize(new Dimension(320, 160));
+        heapChart.setPreferredSize(new Dimension(320, 160));
+        tpsChart.setMaximumSize(new Dimension(Integer.MAX_VALUE, 160));
+        heapChart.setMaximumSize(new Dimension(Integer.MAX_VALUE, 160));
 
-        JScrollPane rightScroll = new JScrollPane(right,
-                JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
-                JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-        rightScroll.setBorder(null);
-        rightScroll.setBackground(BG);
-        rightScroll.getViewport().setBackground(BG);
+        JScrollPane rightScroll = new JScrollPane(right);
+        styleScrollPane(rightScroll);
 
         JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, left, rightScroll);
         split.setResizeWeight(0.73);
+        split.setDividerSize(6);
+        split.setOpaque(false);
         split.setBorder(null);
-        split.setBackground(BG);
-        split.setDividerSize(5);
         return split;
     }
 
     private void buildLogTable() {
         logTable = new JTable(logModel);
-        logTable.setBackground(BG);
-        logTable.setForeground(TEXT);
-        logTable.setGridColor(BORDER);
-        logTable.setShowHorizontalLines(true);
+        logTable.setOpaque(false);
+        logTable.setFillsViewportHeight(true);
+        logTable.setShowHorizontalLines(false);
         logTable.setShowVerticalLines(false);
         logTable.setIntercellSpacing(new Dimension(0, 0));
-        logTable.setRowHeight(26);
-        logTable.setSelectionBackground(MUTED);
-        logTable.setSelectionForeground(TEXT);
-        logTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, logFontSize));
-        logTable.getTableHeader().setBackground(CARD);
-        logTable.getTableHeader().setForeground(TEXT_MUTED);
-        logTable.getTableHeader().setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, BORDER));
-        logTable.setAutoResizeMode(JTable.AUTO_RESIZE_LAST_COLUMN);
+        logTable.setRowHeight(22);
+        logTable.setTableHeader(null);
+        logTable.setDefaultRenderer(Object.class, new PixelLogCellRenderer());
+        logTable.setSelectionBackground(MinecraftTheme.SELECTION);
+        logTable.setSelectionForeground(MinecraftTheme.PANEL_TEXT);
+        logTable.setRowMargin(0);
 
         TableColumnModel cols = logTable.getColumnModel();
-        cols.getColumn(0).setMinWidth(68); cols.getColumn(0).setMaxWidth(76); cols.getColumn(0).setPreferredWidth(72);
-        cols.getColumn(1).setMinWidth(50); cols.getColumn(1).setMaxWidth(58); cols.getColumn(1).setPreferredWidth(54);
-
-        logTable.setDefaultRenderer(Object.class, new LogCellRenderer());
+        cols.getColumn(0).setMinWidth(104);
+        cols.getColumn(0).setMaxWidth(110);
+        cols.getColumn(1).setMinWidth(86);
+        cols.getColumn(1).setMaxWidth(94);
 
         logSorter = new TableRowSorter<>(logModel);
         for (int i = 0; i < logModel.getColumnCount(); i++) logSorter.setSortable(i, false);
         logTable.setRowSorter(logSorter);
+        searchField.getDocument().addDocumentListener(SimpleDocumentListener.onChange(this::applyFilters));
 
-        searchField.getDocument().addDocumentListener(
-                SimpleDocumentListener.onChange(this::applyFilters));
-
-        logScrollPane = new JScrollPane(logTable) {
-            @Override protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(BG);
-                g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 8, 8);
-                g2.dispose();
-                super.paintComponent(g);
-            }
-        };
-        logScrollPane.setBackground(BG);
-        logScrollPane.getViewport().setBackground(BG);
-        logScrollPane.setBorder(BorderFactory.createLineBorder(BORDER, 1, true));
+        logScrollPane = new JScrollPane(logTable);
+        styleScrollPane(logScrollPane);
+        logScrollPane.getViewport().setOpaque(false);
+        logScrollPane.setViewportView(logTable);
     }
 
-    private JPanel buildLogToolbar() {
-        JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+    private void styleScrollPane(JScrollPane scrollPane) {
+        scrollPane.setOpaque(false);
+        scrollPane.getViewport().setOpaque(false);
+        scrollPane.setBorder(BorderFactory.createLineBorder(MinecraftTheme.TEXT_DARK));
+        scrollPane.getVerticalScrollBar().setUI(new MinecraftScrollBarUI());
+        scrollPane.getHorizontalScrollBar().setUI(new MinecraftScrollBarUI());
+        scrollPane.getVerticalScrollBar().setUnitIncrement(16);
+    }
+
+    private JComponent buildLogToolbar() {
+        JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         bar.setOpaque(false);
-
-        searchField.setColumns(26);
-        searchField.setBackground(CARD);
-        searchField.setForeground(TEXT);
-        searchField.setCaretColor(TEXT);
-        searchField.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(BORDER),
-                BorderFactory.createEmptyBorder(5, 8, 5, 8)));
-        searchField.putClientProperty("JTextField.placeholderText", "Search…");
-
         bar.add(searchField);
         bar.add(buildFilterButton());
         return bar;
     }
 
-    private JButton buildFilterButton() {
-        JButton btn = ghostBtn("Filter ▾");
+    private MinecraftButton buildFilterButton() {
+        MinecraftButton button = new MinecraftButton("Filter", 2);
 
         JPopupMenu popup = new JPopupMenu();
-        popup.setBackground(CARD);
-        popup.setBorder(BorderFactory.createLineBorder(BORDER));
+        popup.setBorder(BorderFactory.createLineBorder(MinecraftTheme.TEXT_DARK));
+        popup.setBackground(MinecraftTheme.BG);
 
-        popup.add(popupHeader("Level"));
-        for (Level lv : Level.values()) {
-            JCheckBoxMenuItem item = checkItem(lv.name(), levelFg(lv));
-            item.addActionListener(e -> {
-                if (item.isSelected()) visibleLevels.add(lv); else visibleLevels.remove(lv);
-                applyFilters();
-            });
-            popup.add(item);
-        }
+        popup.add(checkItem("INFO", Level.INFO, null, MinecraftTheme.INFO));
+        popup.add(checkItem("WARN", Level.WARN, null, MinecraftTheme.WARN));
+        popup.add(checkItem("ERROR", Level.ERROR, null, MinecraftTheme.ERROR));
         popup.add(new JSeparator());
-        popup.add(popupHeader("Category"));
+        popup.add(checkItem("CHAT", null, Category.CHAT, MinecraftTheme.CHAT));
+        popup.add(checkItem("COMMANDS", null, Category.COMMAND, MinecraftTheme.COMMAND));
+        popup.add(checkItem("SYSTEM", null, Category.SYSTEM, MinecraftTheme.TEXT_MUTED));
 
-        JCheckBoxMenuItem chatItem = checkItem("Chat",     new Color(0x60A5FA));
-        chatItem.addActionListener(e -> { toggle(visibleCategories, Category.CHAT, chatItem.isSelected()); applyFilters(); });
-        JCheckBoxMenuItem cmdItem  = checkItem("Commands", new Color(0xA78BFA));
-        cmdItem.addActionListener(e ->  { toggle(visibleCategories, Category.COMMAND, cmdItem.isSelected()); applyFilters(); });
-        JCheckBoxMenuItem sysItem  = checkItem("System",   TEXT_SEC);
-        sysItem.addActionListener(e ->  { toggle(visibleCategories, Category.SYSTEM, sysItem.isSelected()); applyFilters(); });
-        popup.add(chatItem); popup.add(cmdItem); popup.add(sysItem);
+        button.addActionListener(e -> popup.show(button, 0, button.getHeight()));
+        return button;
+    }
 
-        btn.addActionListener(e -> popup.show(btn, 0, btn.getHeight()));
-        return btn;
+    private JCheckBoxMenuItem checkItem(String text, Level level, Category category, Color color) {
+        JCheckBoxMenuItem item = new JCheckBoxMenuItem(text, true);
+        item.setForeground(color);
+        item.setBackground(MinecraftTheme.BG);
+        item.addActionListener(e -> {
+            if (level != null) toggle(visibleLevels, level, item.isSelected());
+            if (category != null) toggle(visibleCategories, category, item.isSelected());
+            applyFilters();
+        });
+        return item;
     }
 
     private static <T> void toggle(Set<T> set, T value, boolean add) {
-        if (add) set.add(value); else set.remove(value);
+        if (add) set.add(value);
+        else set.remove(value);
     }
 
-    private JPanel buildPlayersCard() {
-        JPanel card = new JPanel(new BorderLayout(0, 8)) {
-            @Override protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(CARD);
-                g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 8, 8);
-                g2.setColor(BORDER);
-                g2.setStroke(new BasicStroke(1f));
-                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 8, 8);
-                g2.dispose();
-            }
-        };
-        card.setOpaque(false);
-        card.setMaximumSize(new Dimension(Short.MAX_VALUE, 190));
-        card.setPreferredSize(new Dimension(300, 190));
-        card.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+    private JComponent buildPlayersCard() {
+        MinecraftPanel panel = new MinecraftPanel(true, 0.95f);
+        panel.setBorder(new EmptyBorder(10, 10, 10, 10));
 
-        JLabel title = new JLabel("Players Online");
-        title.setFont(title.getFont().deriveFont(Font.BOLD, 12f));
-        title.setForeground(TEXT_SEC);
+        JPanel inner = new JPanel();
+        inner.setOpaque(false);
+        inner.setLayout(new BoxLayout(inner, BoxLayout.Y_AXIS));
+
+        MinecraftLabel title = new MinecraftLabel("PLAYERS ONLINE", 2);
+        title.setAlignmentX(Component.LEFT_ALIGNMENT);
+        inner.add(title);
+        inner.add(Box.createVerticalStrut(6));
 
         JList<String> list = new JList<>(playerModel);
-        list.setBackground(CARD);
-        list.setForeground(TEXT);
-        list.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-        list.setBorder(null);
+        list.setOpaque(false);
+        list.setCellRenderer(new PlayerCellRenderer());
 
-        JScrollPane sp = new JScrollPane(list);
-        sp.setBackground(CARD);
-        sp.getViewport().setBackground(CARD);
-        sp.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, BORDER));
+        JScrollPane scroller = new JScrollPane(list);
+        styleScrollPane(scroller);
+        scroller.setPreferredSize(new Dimension(300, 180));
+        scroller.setAlignmentX(Component.LEFT_ALIGNMENT);
+        inner.add(scroller);
 
-        card.add(title, BorderLayout.NORTH);
-        card.add(sp,    BorderLayout.CENTER);
-        return card;
-    }
-
-    private JPanel buildFooter() {
-        JPanel panel = new JPanel(new BorderLayout(6, 0));
-        panel.setOpaque(false);
-        panel.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
-
-        commandField.setBackground(CARD);
-        commandField.setForeground(TEXT);
-        commandField.setCaretColor(TEXT);
-        commandField.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13));
-        commandField.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(BORDER),
-                BorderFactory.createEmptyBorder(6, 10, 6, 10)));
-        commandField.putClientProperty("JTextField.placeholderText", "Enter command…");
-        commandField.addActionListener(e -> sendCommand());
-
-        JButton sendBtn = ghostBtn("Send");
-        sendBtn.addActionListener(e -> sendCommand());
-
-        panel.add(commandField, BorderLayout.CENTER);
-        panel.add(sendBtn,      BorderLayout.EAST);
+        panel.add(inner, BorderLayout.CENTER);
         return panel;
     }
 
-    // ── Event wiring ───────────────────────────────────────────────────────
+    private JComponent buildFooter() {
+        JPanel footer = new JPanel(new BorderLayout(8, 0));
+        footer.setOpaque(false);
+        footer.add(commandField, BorderLayout.CENTER);
+        MinecraftButton send = new MinecraftButton("Send", 2);
+        send.addActionListener(e -> sendCommand());
+        footer.add(send, BorderLayout.EAST);
+        commandField.addActionListener(e -> sendCommand());
+        return footer;
+    }
 
     private void attachEvents() {
         startButton.addActionListener(e -> controller.start());
@@ -427,34 +321,41 @@ public final class MainFrame extends JFrame {
             logModel.add(entry);
             maybeScrollToBottom();
         }));
-        controller.onPlayers(p -> SwingUtilities.invokeLater(() -> updatePlayers(p)));
-        controller.onTps(v -> SwingUtilities.invokeLater(() -> tpsChart.addPoint(v, 20.0)));
-        controller.onHeap(s -> SwingUtilities.invokeLater(() -> updateHeap(s)));
-        controller.onStatus(s -> SwingUtilities.invokeLater(() -> updateStatus(s)));
+        controller.onPlayers(players -> SwingUtilities.invokeLater(() -> updatePlayers(players)));
+        controller.onTps(value -> SwingUtilities.invokeLater(() -> tpsChart.addPoint(value, 20.0)));
+        controller.onHeap(sample -> SwingUtilities.invokeLater(() -> updateHeap(sample)));
+        controller.onStatus(status -> SwingUtilities.invokeLater(() -> updateStatus(status)));
 
         addWindowListener(new WindowAdapter() {
-            @Override public void windowClosing(WindowEvent e) { controller.shutdown(); dispose(); }
+            @Override
+            public void windowClosing(WindowEvent e) {
+                controller.shutdown();
+                dispose();
+            }
         });
     }
 
     private void installZoomKeys() {
         KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(e -> {
             if (e.getID() == KeyEvent.KEY_PRESSED && e.isControlDown()) {
-                int k = e.getKeyCode();
-                // VK_EQUALS = '=' key (same key as '+' on QWERTY), VK_ADD = numpad '+'
-                if (k == KeyEvent.VK_EQUALS || k == KeyEvent.VK_ADD)      { adjustFontSize(+1); return true; }
-                if (k == KeyEvent.VK_MINUS  || k == KeyEvent.VK_SUBTRACT) { adjustFontSize(-1); return true; }
+                int key = e.getKeyCode();
+                if (key == KeyEvent.VK_EQUALS || key == KeyEvent.VK_ADD) {
+                    adjustFontSize(+2);
+                    return true;
+                }
+                if (key == KeyEvent.VK_MINUS || key == KeyEvent.VK_SUBTRACT) {
+                    adjustFontSize(-2);
+                    return true;
+                }
             }
             return false;
         });
     }
 
-    // ── Logic ──────────────────────────────────────────────────────────────
-
     private void sendCommand() {
-        String cmd = commandField.getText().trim();
-        if (cmd.isEmpty()) return;
-        controller.sendCommand(cmd);
+        String command = commandField.getText().trim();
+        if (command.isEmpty()) return;
+        controller.sendCommand(command);
         commandField.setText("");
     }
 
@@ -463,27 +364,35 @@ public final class MainFrame extends JFrame {
         players.forEach(playerModel::addElement);
     }
 
-    private void updateHeap(HeapSample s) { heapChart.addPoint(s.usedMb(), s.totalMb()); }
+    private void updateHeap(HeapSample sample) {
+        heapChart.addPoint(sample.usedMb(), sample.totalMb());
+    }
 
     private void updateStatus(ServerStatus status) {
         switch (status) {
             case LOADING -> {
-                statusLabel.setText("Loading");  statusLabel.setForeground(FG_AMBER);
-                statusDot.setColor(FG_AMBER);
-                startButton.setEnabled(false); stopButton.setEnabled(true);
-                restartButton.setEnabled(false); killButton.setEnabled(true);
+                statusLabel.setPixelText("LOADING");
+                statusLabel.setPixelColor(MinecraftTheme.WARN);
+                startButton.setEnabled(false);
+                stopButton.setEnabled(true);
+                restartButton.setEnabled(false);
+                killButton.setEnabled(true);
             }
             case ONLINE -> {
-                statusLabel.setText("Online");   statusLabel.setForeground(FG_GREEN);
-                statusDot.setColor(FG_GREEN);
-                startButton.setEnabled(false); stopButton.setEnabled(true);
-                restartButton.setEnabled(true);  killButton.setEnabled(true);
+                statusLabel.setPixelText("ONLINE");
+                statusLabel.setPixelColor(MinecraftTheme.SUCCESS);
+                startButton.setEnabled(false);
+                stopButton.setEnabled(true);
+                restartButton.setEnabled(true);
+                killButton.setEnabled(true);
             }
             case OFFLINE -> {
-                statusLabel.setText("Offline");  statusLabel.setForeground(FG_RED);
-                statusDot.setColor(FG_RED);
-                startButton.setEnabled(true);  stopButton.setEnabled(false);
-                restartButton.setEnabled(false); killButton.setEnabled(false);
+                statusLabel.setPixelText("OFFLINE");
+                statusLabel.setPixelColor(MinecraftTheme.ERROR);
+                startButton.setEnabled(true);
+                stopButton.setEnabled(false);
+                restartButton.setEnabled(false);
+                killButton.setEnabled(false);
             }
         }
     }
@@ -494,12 +403,12 @@ public final class MainFrame extends JFrame {
             @Override
             public boolean include(Entry<? extends LogTableModel, ? extends Integer> entry) {
                 int modelRow = (Integer) entry.getIdentifier();
-                LogEntry e = logModel.getEntry(modelRow);
-                if (!visibleLevels.contains(e.level()))        return false;
-                if (!visibleCategories.contains(e.category())) return false;
+                LogEntry logEntry = logModel.getEntry(modelRow);
+                if (!visibleLevels.contains(logEntry.level())) return false;
+                if (!visibleCategories.contains(logEntry.category())) return false;
                 if (!search.isBlank()) {
-                    String msg = AnsiUtil.strip(String.valueOf(entry.getValue(2))).toLowerCase(Locale.ROOT);
-                    return msg.contains(search);
+                    String message = AnsiUtil.strip(String.valueOf(entry.getValue(2))).toLowerCase(Locale.ROOT);
+                    return message.contains(search);
                 }
                 return true;
             }
@@ -511,13 +420,12 @@ public final class MainFrame extends JFrame {
         if (logScrollPane == null) return;
         JScrollBar bar = logScrollPane.getVerticalScrollBar();
         if (bar.getValue() + bar.getVisibleAmount() >= bar.getMaximum() - 40) {
-            int last = logTable.getRowCount() - 1;
-            if (last >= 0) logTable.scrollRectToVisible(logTable.getCellRect(last, 0, true));
+            scrollToBottom();
         }
     }
 
     private void scrollToBottom() {
-        if (logScrollPane == null || logTable == null) return;
+        if (logTable == null) return;
         SwingUtilities.invokeLater(() -> {
             int last = logTable.getRowCount() - 1;
             if (last >= 0) logTable.scrollRectToVisible(logTable.getCellRect(last, 0, true));
@@ -530,175 +438,107 @@ public final class MainFrame extends JFrame {
         if (Taskbar.isTaskbarSupported()) {
             try {
                 Taskbar.getTaskbar().setIconImage(icons.get(icons.size() - 1));
-            } catch (UnsupportedOperationException | SecurityException ignored) {}
+            } catch (UnsupportedOperationException | SecurityException ignored) {
+            }
         }
     }
 
     private void adjustFontSize(int delta) {
-        logFontSize = Math.max(9, Math.min(24, logFontSize + delta));
-        logTable.setFont(new Font(Font.MONOSPACED, Font.PLAIN, logFontSize));
-        logTable.setRowHeight(Math.max(20, logFontSize + 10));
+        logFontSize = Math.max(8, Math.min(24, logFontSize + delta));
+        logTable.setRowHeight(pixelScale() == 1 ? 14 : pixelScale() == 2 ? 22 : 30);
         logTable.repaint();
     }
 
-    // ── Static factories ───────────────────────────────────────────────────
-
-    /** Tinted-background outline button — shadcn semantic button pattern. */
-    private static JButton outlineBtn(String text, Color fg, Color bg, Color border) {
-        JButton btn = new JButton(text);
-        btn.setForeground(fg);
-        btn.setBackground(bg);
-        btn.setFocusPainted(false);
-        btn.setFont(btn.getFont().deriveFont(Font.PLAIN, 12f));
-        btn.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(border),
-                BorderFactory.createEmptyBorder(5, 12, 5, 12)));
-        btn.setOpaque(true);
-        return btn;
-    }
-
-    /** Neutral ghost button for secondary actions (Filter, Send). */
-    private static JButton ghostBtn(String text) {
-        JButton btn = new JButton(text);
-        btn.setForeground(TEXT_SEC);
-        btn.setBackground(CARD);
-        btn.setFocusPainted(false);
-        btn.setFont(btn.getFont().deriveFont(Font.PLAIN, 12f));
-        btn.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(BORDER),
-                BorderFactory.createEmptyBorder(5, 12, 5, 12)));
-        btn.setOpaque(true);
-        return btn;
-    }
-
-    private static JCheckBoxMenuItem checkItem(String text, Color fg) {
-        JCheckBoxMenuItem item = new JCheckBoxMenuItem(text, true);
-        item.setBackground(CARD);
-        item.setForeground(fg);
-        item.setFont(item.getFont().deriveFont(Font.PLAIN, 12f));
-        return item;
-    }
-
-    private static JLabel popupHeader(String text) {
-        JLabel lbl = new JLabel("  " + text.toUpperCase(Locale.ROOT));
-        lbl.setFont(lbl.getFont().deriveFont(Font.PLAIN, 10f));
-        lbl.setForeground(TEXT_MUTED);
-        lbl.setBorder(BorderFactory.createEmptyBorder(6, 0, 2, 0));
-        return lbl;
-    }
-
-    private static Color levelFg(Level level) {
-        return switch (level) { case WARN -> WARN_FG; case ERROR -> ERROR_FG; default -> INFO_FG; };
-    }
-
-    private static JPanel hRule() {
-        JPanel rule = new JPanel();
-        rule.setOpaque(false);
-        rule.setPreferredSize(new Dimension(0, 1));
-        rule.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, BORDER));
-        return rule;
+    private int pixelScale() {
+        return Math.max(1, Math.min(3, Math.round(logFontSize / 8f)));
     }
 
     private static void patchDefaults() {
-        // Rounded corners (FlatLaf honours these)
-        UIManager.put("Button.arc",          8);
-        UIManager.put("Component.arc",       8);
-        UIManager.put("TextComponent.arc",   8);
-        // Core backgrounds
-        UIManager.put("Table.background",              BG);
-        UIManager.put("Table.foreground",              TEXT);
-        UIManager.put("Table.selectionBackground",     MUTED);
-        UIManager.put("Table.selectionForeground",     TEXT);
-        UIManager.put("Table.gridColor",               BORDER);
-        UIManager.put("ScrollPane.background",         BG);
-        UIManager.put("Viewport.background",           BG);
-        UIManager.put("List.background",               CARD);
-        UIManager.put("List.foreground",               TEXT);
-        UIManager.put("List.selectionBackground",      MUTED);
-        UIManager.put("List.selectionForeground",      TEXT);
-        // Popup / menu
-        UIManager.put("PopupMenu.background",          CARD);
-        UIManager.put("PopupMenu.border",              BorderFactory.createLineBorder(BORDER));
-        UIManager.put("MenuItem.background",           CARD);
-        UIManager.put("MenuItem.foreground",           TEXT);
-        UIManager.put("MenuItem.selectionBackground",  MUTED);
-        UIManager.put("CheckBoxMenuItem.background",   CARD);
-        UIManager.put("CheckBoxMenuItem.foreground",   TEXT);
-        UIManager.put("Separator.foreground",          BORDER);
-        // Split pane
-        UIManager.put("SplitPane.background",          BG);
-        UIManager.put("SplitPaneDivider.draggingColor",BORDER);
-        // Scrollbar
-        UIManager.put("ScrollBar.background",          BG);
-        UIManager.put("ScrollBar.thumb",               new Color(0x3F3F46));
-        UIManager.put("ScrollBar.track",               BG);
+        UIManager.put("PopupMenu.background", MinecraftTheme.BG);
+        UIManager.put("MenuItem.background", MinecraftTheme.BG);
+        UIManager.put("MenuItem.foreground", MinecraftTheme.PANEL_TEXT);
+        UIManager.put("CheckBoxMenuItem.background", MinecraftTheme.BG);
+        UIManager.put("CheckBoxMenuItem.foreground", MinecraftTheme.PANEL_TEXT);
+        UIManager.put("ScrollBar.width", 8);
     }
 
-    // ── Inner classes ──────────────────────────────────────────────────────
+    private final class PixelLogCellRenderer extends JComponent implements TableCellRenderer {
+        private Object value;
+        private Level level;
+        private boolean selected;
+        private int column;
 
-    private static final class StatusDot extends JPanel {
-        private Color color = FG_RED;
-        StatusDot() { setOpaque(false); }
-        void setColor(Color c) { this.color = c; repaint(); }
+        @Override
+        public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
+            int modelRow = table.convertRowIndexToModel(row);
+            this.value = value;
+            this.level = (Level) table.getModel().getValueAt(modelRow, 1);
+            this.selected = isSelected;
+            this.column = column;
+            return this;
+        }
 
-        @Override protected void paintComponent(Graphics g) {
-            super.paintComponent(g);
-            Graphics2D g2 = (Graphics2D) g.create();
-            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            int s = Math.min(getWidth(), getHeight());
-            int x = (getWidth() - s) / 2, y = (getHeight() - s) / 2;
-            g2.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), 40));
-            g2.fillOval(x - 2, y - 2, s + 4, s + 4);
-            g2.setColor(color);
-            g2.fillOval(x, y, s, s);
+        @Override
+        protected void paintComponent(Graphics graphics) {
+            Graphics2D g2 = (Graphics2D) graphics.create();
+            Color background = selected ? MinecraftTheme.SELECTION : switch (level) {
+                case WARN -> new Color(0x332200);
+                case ERROR -> new Color(0x330000);
+                default -> MinecraftTheme.BG;
+            };
+            g2.setColor(background);
+            g2.fillRect(0, 0, getWidth(), getHeight());
+
+            int scale = pixelScale();
+            int textY = (getHeight() - MinecraftFont.lineHeight(scale)) / 2;
+
+            if (column == 0) {
+                String text = String.valueOf(value);
+                int textWidth = MinecraftFont.textWidth(text, scale);
+                MinecraftFont.drawString(g2, text, Math.max(4, (getWidth() - textWidth) / 2), textY, scale, MinecraftTheme.TEXT_MUTED, false);
+            } else if (column == 1) {
+                String text = String.valueOf(value);
+                int textWidth = MinecraftFont.textWidth(text, scale);
+                MinecraftFont.drawString(g2, text, Math.max(4, (getWidth() - textWidth) / 2), textY, scale, switch (level) {
+                    case WARN -> MinecraftTheme.WARN;
+                    case ERROR -> MinecraftTheme.ERROR;
+                    default -> MinecraftTheme.INFO;
+                }, false);
+            } else {
+                int cursor = 6;
+                String raw = String.valueOf(value);
+                for (AnsiUtil.Segment segment : AnsiUtil.segments(raw, MinecraftTheme.PANEL_TEXT)) {
+                    MinecraftFont.drawString(g2, segment.text(), cursor, textY, scale, segment.color(), false);
+                    cursor += MinecraftFont.textWidth(segment.text(), scale);
+                }
+            }
             g2.dispose();
         }
     }
 
-    private final class LogCellRenderer extends DefaultTableCellRenderer {
+    private static final class PlayerCellRenderer extends JComponent implements javax.swing.ListCellRenderer<String> {
+        private String value = "";
+        private boolean selected;
+
         @Override
-        public Component getTableCellRendererComponent(
-                JTable table, Object value, boolean isSelected,
-                boolean hasFocus, int row, int column) {
-
-            super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-
-            int modelRow = table.convertRowIndexToModel(row);
-            Level level = (Level) table.getModel().getValueAt(modelRow, 1);
-
-            if (!isSelected) {
-                setBackground(switch (level) {
-                    case WARN  -> WARN_ROW;
-                    case ERROR -> ERROR_ROW;
-                    default    -> BG;
-                });
-            }
-
-            setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 6));
-
-            switch (column) {
-                case 0 -> {
-                    setHorizontalAlignment(CENTER);
-                    setForeground(isSelected ? TEXT : TEXT_MUTED);
-                    setFont(table.getFont());
-                }
-                case 1 -> {
-                    setHorizontalAlignment(CENTER);
-                    setForeground(isSelected ? TEXT : levelFg(level));
-                    setFont(table.getFont().deriveFont(Font.PLAIN, table.getFont().getSize() - 1f));
-                }
-                case 2 -> {
-                    setHorizontalAlignment(LEFT);
-                    setFont(table.getFont());
-                    String raw = String.valueOf(value);
-                    if (raw.contains("\u001B[") || raw.contains("[3") || raw.contains("[9") || raw.contains("[0m")) {
-                        setText(AnsiUtil.toHtml(raw));
-                    } else {
-                        setForeground(isSelected ? TEXT : TEXT);  // full brightness on dark bg
-                    }
-                }
-            }
+        public Component getListCellRendererComponent(JList<? extends String> list, String value, int index, boolean isSelected, boolean cellHasFocus) {
+            this.value = value == null ? "" : value;
+            this.selected = isSelected;
             return this;
+        }
+
+        @Override
+        public Dimension getPreferredSize() {
+            return new Dimension(100, 22);
+        }
+
+        @Override
+        protected void paintComponent(Graphics graphics) {
+            Graphics2D g2 = (Graphics2D) graphics.create();
+            g2.setColor(selected ? MinecraftTheme.SELECTION : MinecraftTheme.BG);
+            g2.fillRect(0, 0, getWidth(), getHeight());
+            MinecraftFont.drawString(g2, value, 6, 3, 2, MinecraftTheme.PANEL_TEXT, false);
+            g2.dispose();
         }
     }
 }

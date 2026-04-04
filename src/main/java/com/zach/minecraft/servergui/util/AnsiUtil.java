@@ -2,6 +2,9 @@ package com.zach.minecraft.servergui.util;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.ArrayList;
+import java.util.List;
+import java.awt.Color;
 
 /** Utilities for handling ANSI escape sequences from Minecraft server output. */
 public final class AnsiUtil {
@@ -29,10 +32,58 @@ public final class AnsiUtil {
 
     private AnsiUtil() {}
 
+    public record Segment(String text, Color color) {}
+
     /** Strip all ANSI escape sequences, returning plain text. */
     public static String strip(String input) {
         if (input == null) return "";
         return ANSI_PATTERN.matcher(input).replaceAll("");
+    }
+
+    public static List<Segment> segments(String input, Color defaultColor) {
+        List<Segment> segments = new ArrayList<>();
+        if (input == null || input.isEmpty()) return segments;
+
+        Matcher matcher = ANSI_PATTERN.matcher(input);
+        int last = 0;
+        Color color = defaultColor;
+        while (matcher.find()) {
+            String text = input.substring(last, matcher.start());
+            if (!text.isEmpty()) segments.add(new Segment(text, color));
+            last = matcher.end();
+
+            String codes = matcher.group(1);
+            if (codes.isEmpty() || "0".equals(codes)) {
+                color = defaultColor;
+            } else if (codes.startsWith("38;2;")) {
+                String[] parts = codes.split(";");
+                if (parts.length >= 5) {
+                    try {
+                        color = new Color(
+                                Integer.parseInt(parts[2]),
+                                Integer.parseInt(parts[3]),
+                                Integer.parseInt(parts[4])
+                        );
+                    } catch (NumberFormatException ignored) {
+                        color = defaultColor;
+                    }
+                }
+            } else {
+                try {
+                    int code = Integer.parseInt(codes);
+                    String hex = null;
+                    if (code >= 30 && code <= 37) hex = ANSI_HEX[code - 30];
+                    else if (code >= 90 && code <= 97) hex = ANSI_HEX[code - 82];
+                    color = hex == null ? defaultColor : Color.decode("#" + hex);
+                } catch (NumberFormatException ignored) {
+                    color = defaultColor;
+                }
+            }
+        }
+
+        String tail = input.substring(last);
+        if (!tail.isEmpty()) segments.add(new Segment(tail, color));
+        return segments;
     }
 
     /**
