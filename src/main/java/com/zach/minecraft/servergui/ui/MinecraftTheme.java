@@ -12,15 +12,17 @@ import java.io.InputStream;
 import javax.imageio.ImageIO;
 
 final class MinecraftTheme {
-    static final Color BG = new Color(0x1B1B1B);
+    private static volatile double UI_SCALE = 1.0;
+
+    static final Color BG = new Color(0x101010);
     static final Color PANEL_TEXT = new Color(0xFFFFFF);
-    static final Color TEXT_MUTED = new Color(0xA0A0A0);
-    static final Color TEXT_DARK = new Color(0x3F3F3F);
+    static final Color TEXT_MUTED = new Color(0x787878);
+    static final Color TEXT_DARK = new Color(0x1B1B1B);
     static final Color INFO = new Color(0xFFFFFF);
     static final Color WARN = new Color(0xFFAA00);
     static final Color ERROR = new Color(0xFF5555);
     static final Color SUCCESS = new Color(0x55FF55);
-    static final Color SELECTION = new Color(0x6C6C6C);
+    static final Color SELECTION = new Color(0x3F3F3F);
     static final Color CHAT = new Color(0x55FFFF);
     static final Color COMMAND = new Color(0xFF55FF);
 
@@ -37,6 +39,18 @@ final class MinecraftTheme {
     static final BufferedImage ICON = load("icons/server-gui.png");
 
     private MinecraftTheme() {}
+
+    static double uiScale() {
+        return UI_SCALE;
+    }
+
+    static void setUiScale(double scale) {
+        UI_SCALE = Math.max(0.5, Math.min(2.0, scale));
+    }
+
+    static int scale(int value) {
+        return Math.max(1, (int) Math.round(value * UI_SCALE));
+    }
 
     static BufferedImage load(String resourcePath) {
         try (InputStream input = MinecraftTheme.class.getClassLoader().getResourceAsStream(resourcePath)) {

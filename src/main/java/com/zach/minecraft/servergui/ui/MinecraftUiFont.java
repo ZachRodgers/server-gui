@@ -52,7 +52,7 @@ final class MinecraftUiFont {
     }
 
     static float scaledSize(int scale) {
-        return scale * 8f;
+        return (float) (scale * 8f * MinecraftTheme.uiScale());
     }
 
     static int textWidth(Graphics2D g2, String text, float size) {

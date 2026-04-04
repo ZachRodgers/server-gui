@@ -14,8 +14,6 @@ public final class ChartPanel extends JPanel {
 
     private final Deque<Double> values = new ArrayDeque<>();
     private final String title;
-    private final String suffix;
-    private final Color lineColor;
     private final DecimalFormat format = new DecimalFormat("0.00");
 
     private double maxValue = 1.0;
@@ -23,8 +21,6 @@ public final class ChartPanel extends JPanel {
 
     public ChartPanel(String title, String suffix, Color lineColor) {
         this.title = title;
-        this.suffix = suffix;
-        this.lineColor = lineColor;
         setOpaque(false);
     }
 
@@ -44,16 +40,17 @@ public final class ChartPanel extends JPanel {
 
         float fontSize = MinecraftUiFont.scaledSize(2);
         FontMetrics metrics = g2.getFontMetrics(MinecraftUiFont.font(fontSize));
-        int baseline = 8 + metrics.getAscent();
+        int baseline = MinecraftTheme.scale(8) + metrics.getAscent();
         MinecraftUiFont.draw(g2, MinecraftUiFont.toSmallCaps(title), 8, baseline, fontSize, MinecraftTheme.PANEL_TEXT, true);
-        String value = format.format(latestValue) + suffix;
+        Color currentColor = currentColor();
+        String value = displayValue();
         int valueWidth = MinecraftUiFont.textWidth(value, fontSize);
-        MinecraftUiFont.draw(g2, value, getWidth() - valueWidth - 8, baseline, fontSize, lineColor, true);
+        MinecraftUiFont.draw(g2, value, getWidth() - valueWidth - 8, baseline, fontSize, currentColor, true);
 
-        int left = 10;
-        int right = getWidth() - 10;
-        int top = 28;
-        int bottom = getHeight() - 10;
+        int left = MinecraftTheme.scale(10);
+        int right = getWidth() - MinecraftTheme.scale(10);
+        int top = MinecraftTheme.scale(28);
+        int bottom = getHeight() - MinecraftTheme.scale(10);
 
         g2.setColor(MinecraftTheme.TEXT_DARK);
         for (int i = 0; i <= 3; i++) {
@@ -74,13 +71,15 @@ public final class ChartPanel extends JPanel {
                 int y = bottom - (int) Math.round(normalized * (bottom - top));
 
                 if (!first) {
-                    g2.setColor(new Color(lineColor.getRed(), lineColor.getGreen(), lineColor.getBlue(), 70));
-                    g2.fillRect(previousX, previousY, Math.max(1, x - previousX), bottom - previousY);
-                    g2.fillRect(previousX, y, Math.max(1, x - previousX), bottom - y);
+                    int width = Math.max(1, x - previousX);
+                    int fillTop = Math.min(previousY, bottom);
+                    g2.setColor(new Color(currentColor.getRed(), currentColor.getGreen(), currentColor.getBlue(), 55));
+                    g2.fillRect(previousX, fillTop, width, bottom - fillTop);
 
-                    g2.setColor(lineColor);
-                    g2.fillRect(previousX, previousY - 1, Math.max(1, x - previousX), 2);
-                    g2.fillRect(x - 1, Math.min(previousY, y), 2, Math.abs(y - previousY) + 1);
+                    g2.setColor(currentColor);
+                    int stroke = Math.max(2, MinecraftTheme.scale(2));
+                    g2.fillRect(previousX, previousY - (stroke / 2), width, stroke);
+                    g2.fillRect(x - (stroke / 2), Math.min(previousY, y), stroke, Math.abs(y - previousY) + 1);
                 }
 
                 previousX = x;
@@ -88,9 +87,29 @@ public final class ChartPanel extends JPanel {
                 first = false;
                 index++;
             }
-            g2.setColor(lineColor);
-            g2.fillRect(previousX - 1, previousY - 1, 2, 2);
+            g2.setColor(currentColor);
+            int point = Math.max(2, MinecraftTheme.scale(2));
+            g2.fillRect(previousX - (point / 2), previousY - (point / 2), point, point);
         }
         g2.dispose();
+    }
+
+    private String displayValue() {
+        if ("Memory".equalsIgnoreCase(title)) {
+            return (int) Math.round(latestValue) + "/" + (int) Math.round(maxValue) + " MB";
+        }
+        return format.format(latestValue);
+    }
+
+    private Color currentColor() {
+        if ("Memory".equalsIgnoreCase(title)) {
+            double ratio = maxValue <= 0 ? 0 : latestValue / maxValue;
+            if (ratio >= 0.8) return MinecraftTheme.ERROR;
+            if (ratio >= 0.5) return MinecraftTheme.WARN;
+            return MinecraftTheme.SUCCESS;
+        }
+        if (latestValue < 15.0) return MinecraftTheme.ERROR;
+        if (latestValue < 19.0) return MinecraftTheme.WARN;
+        return MinecraftTheme.SUCCESS;
     }
 }

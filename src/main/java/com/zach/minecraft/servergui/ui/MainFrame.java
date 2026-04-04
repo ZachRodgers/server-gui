@@ -19,6 +19,7 @@ import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.KeyboardFocusManager;
 import java.awt.Taskbar;
+import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
@@ -53,6 +54,7 @@ import javax.swing.table.TableRowSorter;
 
 public final class MainFrame extends JFrame {
     private static final int CONTROL_FONT_SCALE = 2;
+    private static final double[] UI_ZOOM_STEPS = {0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0};
 
     private final ServerController controller;
     private final LogTableModel logModel = new LogTableModel();
@@ -75,7 +77,12 @@ public final class MainFrame extends JFrame {
     private final MinecraftButton killButton = new MinecraftButton("Force Kill", CONTROL_FONT_SCALE);
 
     private final ChartPanel tpsChart = new ChartPanel("TPS", "", MinecraftTheme.SUCCESS);
-    private final ChartPanel heapChart = new ChartPanel("Heap", " MB", MinecraftTheme.WARN);
+    private final ChartPanel heapChart = new ChartPanel("Memory", "", MinecraftTheme.SUCCESS);
+
+    private final List<String> commandHistory = new ArrayList<>();
+    private int commandHistoryIndex = -1;
+    private String commandDraft = "";
+    private int uiZoomIndex = 2;
 
     private int logFontSize = 16;
 
@@ -108,7 +115,7 @@ public final class MainFrame extends JFrame {
             }
         };
         root.setOpaque(false);
-        root.setBorder(new EmptyBorder(12, 12, 12, 12));
+        root.setBorder(new EmptyBorder(MinecraftTheme.scale(12), MinecraftTheme.scale(12), MinecraftTheme.scale(12), MinecraftTheme.scale(12)));
         root.add(buildHeader(config), BorderLayout.NORTH);
         root.add(buildCenter(), BorderLayout.CENTER);
         root.add(buildFooter(), BorderLayout.SOUTH);
@@ -132,13 +139,16 @@ public final class MainFrame extends JFrame {
         subtitle.setShadow(false);
         statusLabel.setSmallCaps(true);
 
-        titles.add(title);
-        titles.add(Box.createVerticalStrut(4));
-        metaRow.add(buildStatusPanel());
-        metaRow.add(subtitle);
-        titles.add(metaRow);
+        JPanel titleRow = new JPanel(new FlowLayout(FlowLayout.LEFT, MinecraftTheme.scale(8), 0));
+        titleRow.setOpaque(false);
+        titleRow.add(title);
+        titleRow.add(buildStatusPanel());
 
-        JPanel controls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        titles.add(titleRow);
+        titles.add(Box.createVerticalStrut(MinecraftTheme.scale(4)));
+        titles.add(subtitle);
+
+        JPanel controls = new JPanel(new FlowLayout(FlowLayout.RIGHT, MinecraftTheme.scale(8), 0));
         controls.setOpaque(false);
         controls.add(startButton);
         controls.add(stopButton);
@@ -152,7 +162,7 @@ public final class MainFrame extends JFrame {
 
     private JComponent buildStatusPanel() {
         MinecraftPanel panel = new MinecraftPanel(true, 0.92f);
-        panel.setBorder(new EmptyBorder(4, 8, 4, 8));
+        panel.setBorder(new EmptyBorder(MinecraftTheme.scale(4), MinecraftTheme.scale(8), MinecraftTheme.scale(4), MinecraftTheme.scale(8)));
         panel.add(statusLabel, BorderLayout.CENTER);
         return panel;
     }
@@ -175,23 +185,20 @@ public final class MainFrame extends JFrame {
         heapChart.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         right.add(players);
-        right.add(Box.createVerticalStrut(8));
+        right.add(Box.createVerticalStrut(MinecraftTheme.scale(8)));
         right.add(tpsChart);
-        right.add(Box.createVerticalStrut(8));
+        right.add(Box.createVerticalStrut(MinecraftTheme.scale(8)));
         right.add(heapChart);
         right.add(Box.createVerticalGlue());
 
-        tpsChart.setPreferredSize(new Dimension(320, 160));
-        heapChart.setPreferredSize(new Dimension(320, 160));
-        tpsChart.setMaximumSize(new Dimension(Integer.MAX_VALUE, 160));
-        heapChart.setMaximumSize(new Dimension(Integer.MAX_VALUE, 160));
+        updateUiScale();
 
         JScrollPane rightScroll = new JScrollPane(right);
         styleScrollPane(rightScroll);
 
         JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, left, rightScroll);
         split.setResizeWeight(0.73);
-        split.setDividerSize(6);
+        split.setDividerSize(MinecraftTheme.scale(6));
         split.setOpaque(false);
         split.setBorder(null);
         return split;
@@ -223,10 +230,10 @@ public final class MainFrame extends JFrame {
         logTable.setAutoResizeMode(JTable.AUTO_RESIZE_LAST_COLUMN);
 
         TableColumnModel cols = logTable.getColumnModel();
-        cols.getColumn(0).setMinWidth(104);
-        cols.getColumn(0).setMaxWidth(110);
-        cols.getColumn(1).setMinWidth(86);
-        cols.getColumn(1).setMaxWidth(94);
+        cols.getColumn(0).setMinWidth(MinecraftTheme.scale(104));
+        cols.getColumn(0).setMaxWidth(MinecraftTheme.scale(110));
+        cols.getColumn(1).setMinWidth(MinecraftTheme.scale(86));
+        cols.getColumn(1).setMaxWidth(MinecraftTheme.scale(94));
 
         logSorter = new TableRowSorter<>(logModel);
         for (int i = 0; i < logModel.getColumnCount(); i++) logSorter.setSortable(i, false);
@@ -245,11 +252,11 @@ public final class MainFrame extends JFrame {
         scrollPane.setBorder(BorderFactory.createMatteBorder(1, 1, 1, 1, MinecraftTheme.TEXT_DARK));
         scrollPane.getVerticalScrollBar().setUI(new MinecraftScrollBarUI());
         scrollPane.getHorizontalScrollBar().setUI(new MinecraftScrollBarUI());
-        scrollPane.getVerticalScrollBar().setUnitIncrement(16);
+        scrollPane.getVerticalScrollBar().setUnitIncrement(MinecraftTheme.scale(16));
     }
 
     private JComponent buildLogToolbar() {
-        JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT, MinecraftTheme.scale(8), 0));
         bar.setOpaque(false);
         bar.add(searchField);
         bar.add(buildFilterButton());
@@ -294,8 +301,8 @@ public final class MainFrame extends JFrame {
 
     private JComponent buildPlayersCard() {
         MinecraftPanel panel = new MinecraftPanel(true, 0.95f);
-        panel.setBorder(new EmptyBorder(10, 10, 10, 10));
-        JPanel content = new JPanel(new BorderLayout(0, 8));
+        panel.setBorder(new EmptyBorder(MinecraftTheme.scale(10), MinecraftTheme.scale(10), MinecraftTheme.scale(10), MinecraftTheme.scale(10)));
+        JPanel content = new JPanel(new BorderLayout(0, MinecraftTheme.scale(8)));
         content.setOpaque(false);
 
         MinecraftLabel title = new MinecraftLabel("Players Online", 2);
@@ -312,8 +319,8 @@ public final class MainFrame extends JFrame {
         scroller.setBorder(null);
         scroller.getVerticalScrollBar().setUI(new MinecraftScrollBarUI());
         scroller.getHorizontalScrollBar().setUI(new MinecraftScrollBarUI());
-        scroller.getVerticalScrollBar().setUnitIncrement(16);
-        scroller.setPreferredSize(new Dimension(300, 180));
+        scroller.getVerticalScrollBar().setUnitIncrement(MinecraftTheme.scale(16));
+        scroller.setPreferredSize(new Dimension(MinecraftTheme.scale(300), MinecraftTheme.scale(180)));
         content.add(title, BorderLayout.NORTH);
         content.add(scroller, BorderLayout.CENTER);
         panel.add(content, BorderLayout.CENTER);
@@ -321,13 +328,14 @@ public final class MainFrame extends JFrame {
     }
 
     private JComponent buildFooter() {
-        JPanel footer = new JPanel(new BorderLayout(8, 0));
+        JPanel footer = new JPanel(new BorderLayout(MinecraftTheme.scale(8), 0));
         footer.setOpaque(false);
         footer.add(commandField, BorderLayout.CENTER);
         MinecraftButton send = new MinecraftButton("Send", CONTROL_FONT_SCALE);
         send.addActionListener(e -> sendCommand());
         footer.add(send, BorderLayout.EAST);
         commandField.addActionListener(e -> sendCommand());
+        installCommandHistory();
         return footer;
     }
 
@@ -360,11 +368,11 @@ public final class MainFrame extends JFrame {
             if (e.getID() == KeyEvent.KEY_PRESSED && e.isControlDown()) {
                 int key = e.getKeyCode();
                 if (key == KeyEvent.VK_EQUALS || key == KeyEvent.VK_ADD) {
-                    adjustFontSize(+2);
+                    adjustUiZoom(+1);
                     return true;
                 }
                 if (key == KeyEvent.VK_MINUS || key == KeyEvent.VK_SUBTRACT) {
-                    adjustFontSize(-2);
+                    adjustUiZoom(-1);
                     return true;
                 }
             }
@@ -372,10 +380,32 @@ public final class MainFrame extends JFrame {
         });
     }
 
+    private void installCommandHistory() {
+        commandField.getInputMap().put(javax.swing.KeyStroke.getKeyStroke(KeyEvent.VK_UP, 0), "history-up");
+        commandField.getActionMap().put("history-up", new javax.swing.AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                stepCommandHistory(-1);
+            }
+        });
+        commandField.getInputMap().put(javax.swing.KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, 0), "history-down");
+        commandField.getActionMap().put("history-down", new javax.swing.AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                stepCommandHistory(1);
+            }
+        });
+    }
+
     private void sendCommand() {
         String command = commandField.getText().trim();
         if (command.isEmpty()) return;
         controller.sendCommand(command);
+        if (commandHistory.isEmpty() || !commandHistory.get(commandHistory.size() - 1).equals(command)) {
+            commandHistory.add(command);
+        }
+        commandHistoryIndex = commandHistory.size();
+        commandDraft = "";
         commandField.setText("");
     }
 
@@ -384,9 +414,7 @@ public final class MainFrame extends JFrame {
         players.forEach(playerModel::addElement);
     }
 
-    private void updateHeap(HeapSample sample) {
-        heapChart.addPoint(sample.usedMb(), sample.totalMb());
-    }
+    private void updateHeap(HeapSample sample) { heapChart.addPoint(sample.usedMb(), sample.totalMb()); }
 
     private void updateStatus(ServerStatus status) {
         switch (status) {
@@ -463,11 +491,42 @@ public final class MainFrame extends JFrame {
         }
     }
 
-    private void adjustFontSize(int delta) {
-        logFontSize = Math.max(8, Math.min(24, logFontSize + delta));
-        logTable.setRowHeight(pixelScale() == 1 ? 14 : pixelScale() == 2 ? 22 : 30);
-        logTable.revalidate();
-        logTable.repaint();
+    private void adjustUiZoom(int delta) {
+        uiZoomIndex = Math.max(0, Math.min(UI_ZOOM_STEPS.length - 1, uiZoomIndex + delta));
+        updateUiScale();
+    }
+
+    private void updateUiScale() {
+        MinecraftTheme.setUiScale(UI_ZOOM_STEPS[uiZoomIndex]);
+        logFontSize = Math.max(8, (int) Math.round(16 * MinecraftTheme.uiScale()));
+        if (logTable != null) {
+            logTable.setRowHeight(pixelScale() == 1 ? MinecraftTheme.scale(14) : pixelScale() == 2 ? MinecraftTheme.scale(22) : MinecraftTheme.scale(30));
+            logTable.revalidate();
+            logTable.repaint();
+        }
+        tpsChart.setPreferredSize(new Dimension(MinecraftTheme.scale(320), MinecraftTheme.scale(160)));
+        heapChart.setPreferredSize(new Dimension(MinecraftTheme.scale(320), MinecraftTheme.scale(160)));
+        tpsChart.setMaximumSize(new Dimension(Integer.MAX_VALUE, MinecraftTheme.scale(160)));
+        heapChart.setMaximumSize(new Dimension(Integer.MAX_VALUE, MinecraftTheme.scale(160)));
+        setMinimumSize(new Dimension(MinecraftTheme.scale(1240), MinecraftTheme.scale(800)));
+        if (getContentPane() instanceof JComponent component) {
+            component.setBorder(new EmptyBorder(MinecraftTheme.scale(12), MinecraftTheme.scale(12), MinecraftTheme.scale(12), MinecraftTheme.scale(12)));
+        }
+        revalidate();
+        repaint();
+    }
+
+    private void stepCommandHistory(int direction) {
+        if (commandHistory.isEmpty()) return;
+        if (commandHistoryIndex == commandHistory.size()) {
+            commandDraft = commandField.getText();
+        }
+        commandHistoryIndex = Math.max(0, Math.min(commandHistory.size(), commandHistoryIndex + direction));
+        if (commandHistoryIndex == commandHistory.size()) {
+            commandField.setText(commandDraft);
+        } else {
+            commandField.setText(commandHistory.get(commandHistoryIndex));
+        }
     }
 
     private int pixelScale() {
@@ -573,7 +632,7 @@ public final class MainFrame extends JFrame {
 
         @Override
         public Dimension getPreferredSize() {
-            return new Dimension(100, 34);
+            return new Dimension(MinecraftTheme.scale(100), MinecraftTheme.scale(34));
         }
 
         @Override
@@ -582,11 +641,13 @@ public final class MainFrame extends JFrame {
             g2.setColor(selected ? MinecraftTheme.SELECTION : MinecraftTheme.BG);
             g2.fillRect(0, 0, getWidth(), getHeight());
             BufferedImage image = PlayerHeadCache.get(value, this::repaint);
-            g2.drawImage(image, 5, 5, 24, 24, null);
+            int head = MinecraftTheme.scale(24);
+            int pad = MinecraftTheme.scale(5);
+            g2.drawImage(image, pad, pad, head, head, null);
             float fontSize = MinecraftUiFont.scaledSize(2);
             FontMetrics metrics = g2.getFontMetrics(MinecraftUiFont.font(fontSize));
             int baseline = (getHeight() - metrics.getHeight()) / 2 + metrics.getAscent();
-            MinecraftUiFont.draw(g2, value, 36, baseline, fontSize, MinecraftTheme.PANEL_TEXT, false);
+            MinecraftUiFont.draw(g2, value, pad + head + MinecraftTheme.scale(7), baseline, fontSize, MinecraftTheme.PANEL_TEXT, false);
             g2.dispose();
         }
     }

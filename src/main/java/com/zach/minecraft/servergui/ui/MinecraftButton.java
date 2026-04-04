@@ -26,9 +26,10 @@ final class MinecraftButton extends JButton {
     public Dimension getPreferredSize() {
         float fontSize = MinecraftUiFont.scaledSize(fontScale);
         int textWidth = MinecraftUiFont.textWidth(displayText(), fontSize);
-        int width = Math.max(72, textWidth + (12 * fontScale));
-        width += (fontScale - (width % fontScale)) % fontScale;
-        int height = 20 * fontScale;
+        int unit = Math.max(1, MinecraftTheme.scale(fontScale));
+        int width = Math.max(MinecraftTheme.scale(72), textWidth + MinecraftTheme.scale(12 * fontScale));
+        width += (unit - (width % unit)) % unit;
+        int height = MinecraftTheme.scale(20 * fontScale);
         return new Dimension(width, height);
     }
 
@@ -54,9 +55,9 @@ final class MinecraftButton extends JButton {
         float fontSize = MinecraftUiFont.scaledSize(fontScale);
         String text = displayText();
         FontMetrics metrics = g2.getFontMetrics(MinecraftUiFont.font(fontSize));
-        int textWidth = metrics.stringWidth(text);
+        int textWidth = MinecraftUiFont.textWidth(text, fontSize);
         int textX = (getWidth() - textWidth) / 2;
-        int pressOffset = getModel().isPressed() ? Math.max(1, fontScale / 2) : 0;
+        int pressOffset = getModel().isPressed() ? Math.max(1, MinecraftTheme.scale(fontScale) / 2) : 0;
         int baseline = (getHeight() - metrics.getHeight()) / 2 + metrics.getAscent() + pressOffset;
         MinecraftUiFont.draw(g2, text, textX, baseline, fontSize, isEnabled() ? MinecraftTheme.PANEL_TEXT : MinecraftTheme.TEXT_MUTED, true);
         g2.dispose();

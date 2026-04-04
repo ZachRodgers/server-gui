@@ -5,6 +5,7 @@ com/zach/minecraft/servergui/ui/ChartPanel.class
 com/zach/minecraft/servergui/ui/LinuxDesktopIntegration.class
 com/zach/minecraft/servergui/ui/MainFrame$2.class
 com/zach/minecraft/servergui/ui/PlayerHeadCache.class
+com/zach/minecraft/servergui/ui/MainFrame$7.class
 com/zach/minecraft/servergui/ui/MainFrame$PlayerCellRenderer.class
 com/zach/minecraft/servergui/model/LogEntry$Category.class
 com/zach/minecraft/servergui/ui/MinecraftButton.class
@@ -33,3 +34,4 @@ com/zach/minecraft/servergui/ui/LogTableModel.class
 com/zach/minecraft/servergui/service/ServerController$ServerStatus.class
 com/zach/minecraft/servergui/ui/MainFrame$PixelLogCellRenderer.class
 com/zach/minecraft/servergui/service/ServerController.class
+com/zach/minecraft/servergui/ui/MainFrame$6.class

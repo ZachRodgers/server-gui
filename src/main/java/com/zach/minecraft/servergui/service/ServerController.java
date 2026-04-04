@@ -39,6 +39,7 @@ public final class ServerController {
     private static final Pattern LEAVE_PATTERN = Pattern.compile("([A-Za-z0-9_]{3,16}) left the game");
     private static final Pattern TPS_PATTERN   = Pattern.compile("TPS.*?:\\s*([0-9.]+)");
     private static final Pattern HEAP_PATTERN  = Pattern.compile("(?:\\S+\\s+)*heap\\s+total\\s+(\\d+)([KMG]),\\s+used\\s+(\\d+)([KMG])", Pattern.CASE_INSENSITIVE);
+    private static final Pattern MAX_HEAP_PATTERN = Pattern.compile("MaxHeapSize(?:=|\\s*=\\s*)(\\d+)");
     private static final Pattern BODY_PREFIX_PATTERN = Pattern.compile("^(?:\\[[^\\]]+/(?:TRACE|DEBUG|INFO|WARN|ERROR|FATAL)]\\s*:?[ ]*)+");
     // Matches player chat after stripping server thread prefixes
     private static final Pattern CHAT_PATTERN      = Pattern.compile("(?:^|\\s)<?[A-Za-z0-9_]{3,16}>\\s|^\\[Not Secure]\\s*<[A-Za-z0-9_]{3,16}>");
@@ -68,6 +69,8 @@ public final class ServerController {
     private final AtomicInteger     pendingSilentPlayerPolls = new AtomicInteger();
     private final AtomicInteger     pendingSilentTpsPolls = new AtomicInteger();
     private volatile boolean        heapUnavailableLogged;
+    private volatile long           cachedHeapPid = -1;
+    private volatile double         cachedMaxHeapMb = -1;
 
     public ServerController(AppConfig config) {
         this.config = Objects.requireNonNull(config);
@@ -298,8 +301,9 @@ public final class ServerController {
     private void pollHeapUsage() {
         Optional<ProcessHandle> javaProcess = resolveTargetJavaProcess();
         if (!running || javaProcess.isEmpty()) return;
+        long pid = javaProcess.get().pid();
         try {
-            Process jcmd = new ProcessBuilder("jcmd", String.valueOf(javaProcess.get().pid()), "GC.heap_info")
+            Process jcmd = new ProcessBuilder("jcmd", String.valueOf(pid), "GC.heap_info")
                     .redirectErrorStream(true)
                     .start();
             String output;
@@ -315,8 +319,9 @@ public final class ServerController {
 
             Matcher m = HEAP_PATTERN.matcher(output);
             if (m.find()) {
-                double totalMb = toMb(Integer.parseInt(m.group(1)), m.group(2));
+                double committedMb = toMb(Integer.parseInt(m.group(1)), m.group(2));
                 double usedMb  = toMb(Integer.parseInt(m.group(3)), m.group(4));
+                double totalMb = resolveMaxHeapMb(pid).orElse(committedMb);
                 heapListener.accept(new HeapSample(usedMb, totalMb));
             } else {
                 logHeapUnavailableOnce("Heap polling unavailable: unsupported jcmd heap output.");
@@ -415,6 +420,37 @@ public final class ServerController {
             case "M" -> value;
             default -> value / 1024.0;
         };
+    }
+
+    private Optional<Double> resolveMaxHeapMb(long pid) {
+        if (cachedHeapPid == pid && cachedMaxHeapMb > 0) {
+            return Optional.of(cachedMaxHeapMb);
+        }
+        try {
+            Process jcmd = new ProcessBuilder("jcmd", String.valueOf(pid), "VM.flags")
+                    .redirectErrorStream(true)
+                    .start();
+            String output;
+            try (BufferedReader r = new BufferedReader(
+                    new InputStreamReader(jcmd.getInputStream(), StandardCharsets.UTF_8))) {
+                output = r.lines().reduce("", (a, b) -> a + "\n" + b);
+            }
+            int exitCode = jcmd.waitFor();
+            if (exitCode != 0 || output.isBlank()) return Optional.empty();
+
+            Matcher matcher = MAX_HEAP_PATTERN.matcher(output);
+            if (!matcher.find()) return Optional.empty();
+
+            double maxMb = Long.parseLong(matcher.group(1)) / (1024.0 * 1024.0);
+            cachedHeapPid = pid;
+            cachedMaxHeapMb = maxMb;
+            return Optional.of(maxMb);
+        } catch (IOException ignored) {
+            return Optional.empty();
+        } catch (InterruptedException ignored) {
+            Thread.currentThread().interrupt();
+            return Optional.empty();
+        }
     }
 
     private void logHeapUnavailableOnce(String message) {

@@ -27,9 +27,10 @@ final class MinecraftTextField extends JTextField {
 
     @Override
     public Dimension getPreferredSize() {
-        int width = super.getPreferredSize().width;
-        width += (fontScale - (width % fontScale)) % fontScale;
-        return new Dimension(width, 20 * fontScale);
+        int unit = Math.max(1, MinecraftTheme.scale(fontScale));
+        int width = MinecraftTheme.scale(super.getPreferredSize().width);
+        width += (unit - (width % unit)) % unit;
+        return new Dimension(width, MinecraftTheme.scale(20 * fontScale));
     }
 
     @Override
@@ -47,7 +48,7 @@ final class MinecraftTextField extends JTextField {
         String text = getText();
         float fontSize = MinecraftUiFont.scaledSize(fontScale);
         FontMetrics metrics = g2.getFontMetrics(MinecraftUiFont.font(fontSize));
-        int textX = 4 * fontScale;
+        int textX = MinecraftTheme.scale(4 * fontScale);
         int baseline = (getHeight() - metrics.getHeight()) / 2 + metrics.getAscent();
         if (text == null || text.isEmpty()) {
             MinecraftUiFont.draw(g2, placeholder, textX, baseline, fontSize, MinecraftTheme.TEXT_MUTED, false);
@@ -59,7 +60,7 @@ final class MinecraftTextField extends JTextField {
             int caret = Math.min(getCaretPosition(), text == null ? 0 : text.length());
             int caretX = textX + MinecraftUiFont.textWidth(text == null ? "" : text.substring(0, caret), fontSize);
             g2.setColor(MinecraftTheme.PANEL_TEXT);
-            g2.fillRect(caretX, baseline - metrics.getAscent(), 1, metrics.getHeight());
+            g2.fillRect(caretX, baseline - metrics.getAscent(), Math.max(1, MinecraftTheme.scale(1)), metrics.getHeight());
         }
         g2.dispose();
     }
