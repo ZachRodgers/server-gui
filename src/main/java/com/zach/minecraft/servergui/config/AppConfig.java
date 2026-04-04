@@ -40,9 +40,9 @@ public record AppConfig(
         boolean mockMode = Boolean.parseBoolean(properties.getProperty("mock.mode", "true"));
         String serverCommand = properties.getProperty("server.command", "java -Xms3G -Xmx6G -jar server.jar nogui");
         Path workingDirectory = baseDirectory.resolve(properties.getProperty("working.directory", ".")).normalize();
-        int playerPollSeconds = Integer.parseInt(properties.getProperty("poll.players.seconds", "10"));
-        int tpsPollSeconds = Integer.parseInt(properties.getProperty("poll.tps.seconds", "15"));
-        int heapPollSeconds = Integer.parseInt(properties.getProperty("poll.heap.seconds", "10"));
+        int playerPollSeconds = Integer.parseInt(properties.getProperty("poll.players.seconds", "30"));
+        int tpsPollSeconds    = Integer.parseInt(properties.getProperty("poll.tps.seconds",    "30"));
+        int heapPollSeconds   = Integer.parseInt(properties.getProperty("poll.heap.seconds",   "20"));
 
         return new AppConfig(appTitle, mockMode, serverCommand, workingDirectory, playerPollSeconds, tpsPollSeconds, heapPollSeconds);
     }
@@ -65,9 +65,9 @@ public record AppConfig(
                         .orElse("java -Xms3G -Xmx6G -jar server.jar nogui")
         );
         defaults.setProperty("working.directory", ".");
-        defaults.setProperty("poll.players.seconds", "10");
-        defaults.setProperty("poll.tps.seconds", "15");
-        defaults.setProperty("poll.heap.seconds", "10");
+        defaults.setProperty("poll.players.seconds", "30");
+        defaults.setProperty("poll.tps.seconds",    "30");
+        defaults.setProperty("poll.heap.seconds",   "20");
 
         try (OutputStream outputStream = Files.newOutputStream(configPath)) {
             defaults.store(
