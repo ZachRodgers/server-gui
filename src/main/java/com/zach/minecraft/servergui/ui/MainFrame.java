@@ -12,6 +12,7 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.FontMetrics;
 import java.awt.FlowLayout;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
@@ -21,6 +22,8 @@ import java.awt.Taskbar;
 import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.awt.image.BufferedImage;
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
@@ -49,6 +52,8 @@ import javax.swing.table.TableColumnModel;
 import javax.swing.table.TableRowSorter;
 
 public final class MainFrame extends JFrame {
+    private static final int CONTROL_FONT_SCALE = 2;
+
     private final ServerController controller;
     private final LogTableModel logModel = new LogTableModel();
     private final DefaultListModel<String> playerModel = new DefaultListModel<>();
@@ -60,17 +65,17 @@ public final class MainFrame extends JFrame {
     private JScrollPane logScrollPane;
     private TableRowSorter<LogTableModel> logSorter;
 
-    private final MinecraftTextField searchField = new MinecraftTextField("Search", 26, 2);
-    private final MinecraftTextField commandField = new MinecraftTextField("Enter command", 32, 2);
+    private final MinecraftTextField searchField = new MinecraftTextField("Search", 26, CONTROL_FONT_SCALE);
+    private final MinecraftTextField commandField = new MinecraftTextField("Enter command", 32, CONTROL_FONT_SCALE);
+    private final MinecraftLabel statusLabel = new MinecraftLabel("Offline", CONTROL_FONT_SCALE);
 
-    private final MinecraftLabel statusLabel = new MinecraftLabel("OFFLINE", 2);
-    private final MinecraftButton startButton = new MinecraftButton("Start", 2);
-    private final MinecraftButton stopButton = new MinecraftButton("Stop", 2);
-    private final MinecraftButton restartButton = new MinecraftButton("Restart", 2);
-    private final MinecraftButton killButton = new MinecraftButton("Force Kill", 2);
+    private final MinecraftButton startButton = new MinecraftButton("Start", CONTROL_FONT_SCALE);
+    private final MinecraftButton stopButton = new MinecraftButton("Stop", CONTROL_FONT_SCALE);
+    private final MinecraftButton restartButton = new MinecraftButton("Restart", CONTROL_FONT_SCALE);
+    private final MinecraftButton killButton = new MinecraftButton("Force Kill", CONTROL_FONT_SCALE);
 
     private final ChartPanel tpsChart = new ChartPanel("TPS", "", MinecraftTheme.SUCCESS);
-    private final ChartPanel heapChart = new ChartPanel("Heap", " MB", MinecraftTheme.ERROR);
+    private final ChartPanel heapChart = new ChartPanel("Heap", " MB", MinecraftTheme.WARN);
 
     private int logFontSize = 16;
 
@@ -117,21 +122,24 @@ public final class MainFrame extends JFrame {
         JPanel titles = new JPanel();
         titles.setOpaque(false);
         titles.setLayout(new BoxLayout(titles, BoxLayout.Y_AXIS));
+        JPanel metaRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        metaRow.setOpaque(false);
 
-        MinecraftLabel title = new MinecraftLabel(config.appTitle().toUpperCase(Locale.ROOT), 3);
-        MinecraftLabel subtitle = new MinecraftLabel(
-                (config.mockMode() ? "MOCK MODE" : config.workingDirectory().toString()).toUpperCase(Locale.ROOT),
-                2
-        );
+        MinecraftLabel title = new MinecraftLabel(config.appTitle(), 3);
+        title.setSmallCaps(true);
+        MinecraftLabel subtitle = new MinecraftLabel(config.mockMode() ? "mock mode" : config.workingDirectory().toString(), 2);
         subtitle.setPixelColor(MinecraftTheme.TEXT_MUTED);
+        subtitle.setShadow(false);
+        statusLabel.setSmallCaps(true);
 
         titles.add(title);
         titles.add(Box.createVerticalStrut(4));
-        titles.add(subtitle);
+        metaRow.add(buildStatusPanel());
+        metaRow.add(subtitle);
+        titles.add(metaRow);
 
         JPanel controls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
         controls.setOpaque(false);
-        controls.add(buildStatusPanel());
         controls.add(startButton);
         controls.add(stopButton);
         controls.add(restartButton);
@@ -144,7 +152,7 @@ public final class MainFrame extends JFrame {
 
     private JComponent buildStatusPanel() {
         MinecraftPanel panel = new MinecraftPanel(true, 0.92f);
-        panel.setBorder(new EmptyBorder(6, 10, 6, 10));
+        panel.setBorder(new EmptyBorder(4, 8, 4, 8));
         panel.add(statusLabel, BorderLayout.CENTER);
         return panel;
     }
@@ -190,18 +198,29 @@ public final class MainFrame extends JFrame {
     }
 
     private void buildLogTable() {
-        logTable = new JTable(logModel);
+        logTable = new JTable(logModel) {
+            @Override
+            public Component prepareRenderer(TableCellRenderer renderer, int row, int column) {
+                Component component = super.prepareRenderer(renderer, row, column);
+                int preferred = component.getPreferredSize().height;
+                if (getRowHeight(row) != preferred) {
+                    setRowHeight(row, preferred);
+                }
+                return component;
+            }
+        };
         logTable.setOpaque(false);
         logTable.setFillsViewportHeight(true);
         logTable.setShowHorizontalLines(false);
         logTable.setShowVerticalLines(false);
         logTable.setIntercellSpacing(new Dimension(0, 0));
-        logTable.setRowHeight(22);
+        logTable.setRowHeight(16);
         logTable.setTableHeader(null);
         logTable.setDefaultRenderer(Object.class, new PixelLogCellRenderer());
         logTable.setSelectionBackground(MinecraftTheme.SELECTION);
         logTable.setSelectionForeground(MinecraftTheme.PANEL_TEXT);
         logTable.setRowMargin(0);
+        logTable.setAutoResizeMode(JTable.AUTO_RESIZE_LAST_COLUMN);
 
         TableColumnModel cols = logTable.getColumnModel();
         cols.getColumn(0).setMinWidth(104);
@@ -223,7 +242,7 @@ public final class MainFrame extends JFrame {
     private void styleScrollPane(JScrollPane scrollPane) {
         scrollPane.setOpaque(false);
         scrollPane.getViewport().setOpaque(false);
-        scrollPane.setBorder(BorderFactory.createLineBorder(MinecraftTheme.TEXT_DARK));
+        scrollPane.setBorder(BorderFactory.createMatteBorder(1, 1, 1, 1, MinecraftTheme.TEXT_DARK));
         scrollPane.getVerticalScrollBar().setUI(new MinecraftScrollBarUI());
         scrollPane.getHorizontalScrollBar().setUI(new MinecraftScrollBarUI());
         scrollPane.getVerticalScrollBar().setUnitIncrement(16);
@@ -238,19 +257,19 @@ public final class MainFrame extends JFrame {
     }
 
     private MinecraftButton buildFilterButton() {
-        MinecraftButton button = new MinecraftButton("Filter", 2);
+        MinecraftButton button = new MinecraftButton("Filter", CONTROL_FONT_SCALE);
 
         JPopupMenu popup = new JPopupMenu();
-        popup.setBorder(BorderFactory.createLineBorder(MinecraftTheme.TEXT_DARK));
+        popup.setBorder(BorderFactory.createMatteBorder(1, 1, 1, 1, MinecraftTheme.TEXT_DARK));
         popup.setBackground(MinecraftTheme.BG);
 
-        popup.add(checkItem("INFO", Level.INFO, null, MinecraftTheme.INFO));
-        popup.add(checkItem("WARN", Level.WARN, null, MinecraftTheme.WARN));
-        popup.add(checkItem("ERROR", Level.ERROR, null, MinecraftTheme.ERROR));
+        popup.add(checkItem("Info", Level.INFO, null, MinecraftTheme.INFO));
+        popup.add(checkItem("Warn", Level.WARN, null, MinecraftTheme.WARN));
+        popup.add(checkItem("Error", Level.ERROR, null, MinecraftTheme.ERROR));
         popup.add(new JSeparator());
-        popup.add(checkItem("CHAT", null, Category.CHAT, MinecraftTheme.CHAT));
-        popup.add(checkItem("COMMANDS", null, Category.COMMAND, MinecraftTheme.COMMAND));
-        popup.add(checkItem("SYSTEM", null, Category.SYSTEM, MinecraftTheme.TEXT_MUTED));
+        popup.add(checkItem("Chat", null, Category.CHAT, MinecraftTheme.CHAT));
+        popup.add(checkItem("Commands", null, Category.COMMAND, MinecraftTheme.COMMAND));
+        popup.add(checkItem("System", null, Category.SYSTEM, MinecraftTheme.TEXT_MUTED));
 
         button.addActionListener(e -> popup.show(button, 0, button.getHeight()));
         return button;
@@ -276,27 +295,28 @@ public final class MainFrame extends JFrame {
     private JComponent buildPlayersCard() {
         MinecraftPanel panel = new MinecraftPanel(true, 0.95f);
         panel.setBorder(new EmptyBorder(10, 10, 10, 10));
+        JPanel content = new JPanel(new BorderLayout(0, 8));
+        content.setOpaque(false);
 
-        JPanel inner = new JPanel();
-        inner.setOpaque(false);
-        inner.setLayout(new BoxLayout(inner, BoxLayout.Y_AXIS));
-
-        MinecraftLabel title = new MinecraftLabel("PLAYERS ONLINE", 2);
+        MinecraftLabel title = new MinecraftLabel("Players Online", 2);
+        title.setSmallCaps(true);
         title.setAlignmentX(Component.LEFT_ALIGNMENT);
-        inner.add(title);
-        inner.add(Box.createVerticalStrut(6));
 
         JList<String> list = new JList<>(playerModel);
         list.setOpaque(false);
         list.setCellRenderer(new PlayerCellRenderer());
 
         JScrollPane scroller = new JScrollPane(list);
-        styleScrollPane(scroller);
+        scroller.setOpaque(false);
+        scroller.getViewport().setOpaque(false);
+        scroller.setBorder(null);
+        scroller.getVerticalScrollBar().setUI(new MinecraftScrollBarUI());
+        scroller.getHorizontalScrollBar().setUI(new MinecraftScrollBarUI());
+        scroller.getVerticalScrollBar().setUnitIncrement(16);
         scroller.setPreferredSize(new Dimension(300, 180));
-        scroller.setAlignmentX(Component.LEFT_ALIGNMENT);
-        inner.add(scroller);
-
-        panel.add(inner, BorderLayout.CENTER);
+        content.add(title, BorderLayout.NORTH);
+        content.add(scroller, BorderLayout.CENTER);
+        panel.add(content, BorderLayout.CENTER);
         return panel;
     }
 
@@ -304,7 +324,7 @@ public final class MainFrame extends JFrame {
         JPanel footer = new JPanel(new BorderLayout(8, 0));
         footer.setOpaque(false);
         footer.add(commandField, BorderLayout.CENTER);
-        MinecraftButton send = new MinecraftButton("Send", 2);
+        MinecraftButton send = new MinecraftButton("Send", CONTROL_FONT_SCALE);
         send.addActionListener(e -> sendCommand());
         footer.add(send, BorderLayout.EAST);
         commandField.addActionListener(e -> sendCommand());
@@ -371,7 +391,7 @@ public final class MainFrame extends JFrame {
     private void updateStatus(ServerStatus status) {
         switch (status) {
             case LOADING -> {
-                statusLabel.setPixelText("LOADING");
+                statusLabel.setPixelText("Loading");
                 statusLabel.setPixelColor(MinecraftTheme.WARN);
                 startButton.setEnabled(false);
                 stopButton.setEnabled(true);
@@ -379,7 +399,7 @@ public final class MainFrame extends JFrame {
                 killButton.setEnabled(true);
             }
             case ONLINE -> {
-                statusLabel.setPixelText("ONLINE");
+                statusLabel.setPixelText("Online");
                 statusLabel.setPixelColor(MinecraftTheme.SUCCESS);
                 startButton.setEnabled(false);
                 stopButton.setEnabled(true);
@@ -387,7 +407,7 @@ public final class MainFrame extends JFrame {
                 killButton.setEnabled(true);
             }
             case OFFLINE -> {
-                statusLabel.setPixelText("OFFLINE");
+                statusLabel.setPixelText("Offline");
                 statusLabel.setPixelColor(MinecraftTheme.ERROR);
                 startButton.setEnabled(true);
                 stopButton.setEnabled(false);
@@ -446,6 +466,7 @@ public final class MainFrame extends JFrame {
     private void adjustFontSize(int delta) {
         logFontSize = Math.max(8, Math.min(24, logFontSize + delta));
         logTable.setRowHeight(pixelScale() == 1 ? 14 : pixelScale() == 2 ? 22 : 30);
+        logTable.revalidate();
         logTable.repaint();
     }
 
@@ -467,6 +488,7 @@ public final class MainFrame extends JFrame {
         private Level level;
         private boolean selected;
         private int column;
+        private List<WrappedLine> lines = List.of();
 
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
@@ -475,7 +497,25 @@ public final class MainFrame extends JFrame {
             this.level = (Level) table.getModel().getValueAt(modelRow, 1);
             this.selected = isSelected;
             this.column = column;
+            if (column == 2) {
+                this.lines = wrapSegments(
+                        AnsiUtil.segments(String.valueOf(value), MinecraftTheme.PANEL_TEXT),
+                        Math.max(80, table.getColumnModel().getColumn(column).getWidth() - 12),
+                        pixelScale()
+                );
+            } else {
+                this.lines = List.of();
+            }
             return this;
+        }
+
+        @Override
+        public Dimension getPreferredSize() {
+            int scale = pixelScale();
+            if (column != 2) {
+                return new Dimension(20, Math.max(16, MinecraftFont.lineHeight(scale) + 6));
+            }
+            return new Dimension(20, Math.max(16, lines.size() * MinecraftFont.lineHeight(scale) + 6));
         }
 
         @Override
@@ -490,33 +530,37 @@ public final class MainFrame extends JFrame {
             g2.fillRect(0, 0, getWidth(), getHeight());
 
             int scale = pixelScale();
-            int textY = (getHeight() - MinecraftFont.lineHeight(scale)) / 2;
+            int lineHeight = MinecraftFont.lineHeight(scale);
+            int y = Math.max(3, (getHeight() - lineHeight) / 2);
 
             if (column == 0) {
                 String text = String.valueOf(value);
                 int textWidth = MinecraftFont.textWidth(text, scale);
-                MinecraftFont.drawString(g2, text, Math.max(4, (getWidth() - textWidth) / 2), textY, scale, MinecraftTheme.TEXT_MUTED, false);
+                MinecraftFont.drawString(g2, text, Math.max(4, (getWidth() - textWidth) / 2), y, scale, MinecraftTheme.TEXT_MUTED, false);
             } else if (column == 1) {
                 String text = String.valueOf(value);
                 int textWidth = MinecraftFont.textWidth(text, scale);
-                MinecraftFont.drawString(g2, text, Math.max(4, (getWidth() - textWidth) / 2), textY, scale, switch (level) {
+                MinecraftFont.drawString(g2, text, Math.max(4, (getWidth() - textWidth) / 2), y, scale, switch (level) {
                     case WARN -> MinecraftTheme.WARN;
                     case ERROR -> MinecraftTheme.ERROR;
                     default -> MinecraftTheme.INFO;
                 }, false);
             } else {
-                int cursor = 6;
-                String raw = String.valueOf(value);
-                for (AnsiUtil.Segment segment : AnsiUtil.segments(raw, MinecraftTheme.PANEL_TEXT)) {
-                    MinecraftFont.drawString(g2, segment.text(), cursor, textY, scale, segment.color(), false);
-                    cursor += MinecraftFont.textWidth(segment.text(), scale);
+                y = 3;
+                for (WrappedLine line : lines) {
+                    int cursor = 6;
+                    for (AnsiUtil.Segment segment : line.segments()) {
+                        MinecraftFont.drawString(g2, segment.text(), cursor, y, scale, segment.color(), false);
+                        cursor += MinecraftFont.textWidth(segment.text(), scale);
+                    }
+                    y += lineHeight;
                 }
             }
             g2.dispose();
         }
     }
 
-    private static final class PlayerCellRenderer extends JComponent implements javax.swing.ListCellRenderer<String> {
+    private final class PlayerCellRenderer extends JComponent implements javax.swing.ListCellRenderer<String> {
         private String value = "";
         private boolean selected;
 
@@ -529,7 +573,7 @@ public final class MainFrame extends JFrame {
 
         @Override
         public Dimension getPreferredSize() {
-            return new Dimension(100, 22);
+            return new Dimension(100, 34);
         }
 
         @Override
@@ -537,8 +581,70 @@ public final class MainFrame extends JFrame {
             Graphics2D g2 = (Graphics2D) graphics.create();
             g2.setColor(selected ? MinecraftTheme.SELECTION : MinecraftTheme.BG);
             g2.fillRect(0, 0, getWidth(), getHeight());
-            MinecraftFont.drawString(g2, value, 6, 3, 2, MinecraftTheme.PANEL_TEXT, false);
+            BufferedImage image = PlayerHeadCache.get(value, this::repaint);
+            g2.drawImage(image, 5, 5, 24, 24, null);
+            float fontSize = MinecraftUiFont.scaledSize(2);
+            FontMetrics metrics = g2.getFontMetrics(MinecraftUiFont.font(fontSize));
+            int baseline = (getHeight() - metrics.getHeight()) / 2 + metrics.getAscent();
+            MinecraftUiFont.draw(g2, value, 36, baseline, fontSize, MinecraftTheme.PANEL_TEXT, false);
             g2.dispose();
         }
     }
+
+    private static List<WrappedLine> wrapSegments(List<AnsiUtil.Segment> segments, int maxWidth, int scale) {
+        List<WrappedLine> lines = new ArrayList<>();
+        List<AnsiUtil.Segment> current = new ArrayList<>();
+        StringBuilder buffer = new StringBuilder();
+        Color currentColor = null;
+        int width = 0;
+
+        for (AnsiUtil.Segment segment : segments) {
+            for (int i = 0; i < segment.text().length(); ) {
+                int codePoint = segment.text().codePointAt(i);
+                String unit = new String(Character.toChars(codePoint));
+                if (codePoint == '\n') {
+                    flushSegment(current, buffer, currentColor);
+                    lines.add(new WrappedLine(current.isEmpty() ? List.of(new AnsiUtil.Segment("", MinecraftTheme.PANEL_TEXT)) : current));
+                    current = new ArrayList<>();
+                    buffer = new StringBuilder();
+                    currentColor = null;
+                    width = 0;
+                    i += Character.charCount(codePoint);
+                    continue;
+                }
+
+                int advance = MinecraftFont.textWidth(unit, scale);
+                if (width + advance > maxWidth && width > 0) {
+                    flushSegment(current, buffer, currentColor);
+                    lines.add(new WrappedLine(current));
+                    current = new ArrayList<>();
+                    buffer = new StringBuilder();
+                    currentColor = null;
+                    width = 0;
+                }
+
+                if (currentColor == null || !currentColor.equals(segment.color())) {
+                    flushSegment(current, buffer, currentColor);
+                    currentColor = segment.color();
+                }
+                buffer.append(unit);
+                width += advance;
+                i += Character.charCount(codePoint);
+            }
+        }
+
+        flushSegment(current, buffer, currentColor);
+        if (!current.isEmpty()) lines.add(new WrappedLine(current));
+        if (lines.isEmpty()) lines.add(new WrappedLine(List.of(new AnsiUtil.Segment("", MinecraftTheme.PANEL_TEXT))));
+        return lines;
+    }
+
+    private static void flushSegment(List<AnsiUtil.Segment> current, StringBuilder buffer, Color currentColor) {
+        if (currentColor != null && !buffer.isEmpty()) {
+            current.add(new AnsiUtil.Segment(buffer.toString(), currentColor));
+            buffer.setLength(0);
+        }
+    }
+
+    private record WrappedLine(List<AnsiUtil.Segment> segments) {}
 }

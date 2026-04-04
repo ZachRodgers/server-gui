@@ -2,7 +2,9 @@ package com.zach.minecraft.servergui.ui;
 
 import java.awt.Color;
 import java.awt.Dimension;
+import java.awt.FontMetrics;
 import java.awt.Graphics;
+import java.awt.Graphics2D;
 import javax.swing.JComponent;
 
 final class MinecraftLabel extends JComponent {
@@ -10,6 +12,7 @@ final class MinecraftLabel extends JComponent {
     private Color color = MinecraftTheme.PANEL_TEXT;
     private int scale;
     private boolean shadow = true;
+    private boolean smallCaps;
 
     MinecraftLabel(String text, int scale) {
         this.text = text;
@@ -39,15 +42,32 @@ final class MinecraftLabel extends JComponent {
         repaint();
     }
 
+    void setSmallCaps(boolean smallCaps) {
+        this.smallCaps = smallCaps;
+        revalidate();
+        repaint();
+    }
+
     @Override
     public Dimension getPreferredSize() {
-        int width = MinecraftFont.textWidth(text == null ? "" : text, scale);
-        return new Dimension(Math.max(1, width), MinecraftFont.lineHeight(scale));
+        float fontSize = MinecraftUiFont.scaledSize(scale);
+        int width = MinecraftUiFont.textWidth(displayText(), fontSize);
+        return new Dimension(Math.max(1, width), MinecraftUiFont.lineHeight(fontSize));
     }
 
     @Override
     protected void paintComponent(Graphics graphics) {
         super.paintComponent(graphics);
-        MinecraftFont.drawString((java.awt.Graphics2D) graphics, text == null ? "" : text, 0, 0, scale, color, shadow);
+        Graphics2D g2 = (Graphics2D) graphics.create();
+        float fontSize = MinecraftUiFont.scaledSize(scale);
+        FontMetrics metrics = g2.getFontMetrics(MinecraftUiFont.font(fontSize));
+        int baseline = Math.max(metrics.getAscent(), (getHeight() - metrics.getHeight()) / 2 + metrics.getAscent());
+        MinecraftUiFont.draw(g2, displayText(), 0, baseline, fontSize, color, shadow);
+        g2.dispose();
+    }
+
+    private String displayText() {
+        String value = text == null ? "" : text;
+        return smallCaps ? MinecraftUiFont.toSmallCaps(value) : value;
     }
 }

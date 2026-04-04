@@ -20,51 +20,70 @@ final class MinecraftFont {
     }
 
     static int textWidth(String text, int scale) {
+        if (text == null || text.isEmpty()) return 0;
         int width = 0;
-        for (int i = 0; i < text.length(); i++) {
-            width += glyphAdvance(text.charAt(i), scale);
+        for (int i = 0; i < text.length(); ) {
+            int codePoint = text.codePointAt(i);
+            width += glyphAdvance(codePoint, scale);
+            i += Character.charCount(codePoint);
         }
         return width;
     }
 
     static void drawString(Graphics2D g2, String text, int x, int y, int scale, Color color, boolean shadow) {
         if (text == null || text.isEmpty()) return;
-        if (shadow) {
-            drawInternal(g2, text, x + scale, y + scale, scale, MinecraftTheme.TEXT_DARK);
-        }
+        if (shadow) drawInternal(g2, text, x + scale, y + scale, scale, MinecraftTheme.TEXT_DARK);
         drawInternal(g2, text, x, y, scale, color);
     }
 
+    static void drawSmallCaps(Graphics2D g2, String text, int x, int y, int scale, Color color, boolean shadow) {
+        drawString(g2, text, x, y, scale, color, shadow);
+    }
+
+    static int smallCapsWidth(String text, int scale) {
+        return textWidth(text, scale);
+    }
+
     private static void drawInternal(Graphics2D g2, String text, int x, int y, int scale, Color color) {
-        BufferedImage tinted = tintedSheet(color);
         int cursor = x;
         MinecraftTheme.applyPixelRendering(g2);
-        for (int i = 0; i < text.length(); i++) {
-            char ch = text.charAt(i);
-            if (ch == '\n') continue;
-            int code = normalize(ch);
-            int col = code % 16;
-            int row = code / 16;
-            int glyphWidth = glyphWidth(ch);
-            if (glyphWidth > 0) {
-                g2.drawImage(
-                        tinted,
-                        cursor, y, cursor + (glyphWidth * scale), y + (CELL * scale),
-                        col * CELL, row * CELL, col * CELL + glyphWidth, row * CELL + CELL,
-                        null
-                );
+        for (int i = 0; i < text.length(); ) {
+            int codePoint = text.codePointAt(i);
+            if (codePoint == '\n') {
+                i += Character.charCount(codePoint);
+                continue;
             }
-            cursor += glyphAdvance(ch, scale);
+
+            if (isBitmapGlyph(codePoint)) {
+                int code = normalize(codePoint);
+                int col = code % 16;
+                int row = code / 16;
+                int glyphWidth = glyphWidth(codePoint);
+                BufferedImage tinted = tintedSheet(color);
+                if (glyphWidth > 0) {
+                    g2.drawImage(
+                            tinted,
+                            cursor, y, cursor + (glyphWidth * scale), y + (CELL * scale),
+                            col * CELL, row * CELL, col * CELL + glyphWidth, row * CELL + CELL,
+                            null
+                    );
+                }
+            } else {
+                MinecraftUiFont.draw(g2, new String(Character.toChars(codePoint)), cursor, y + (CELL * scale), scale * 8f, color, false);
+            }
+            cursor += glyphAdvance(codePoint, scale);
+            i += Character.charCount(codePoint);
         }
     }
 
-    private static int glyphAdvance(char ch, int scale) {
-        if (ch == ' ') return 4 * scale;
-        return Math.max(2, glyphWidth(ch) + 1) * scale;
+    private static int glyphAdvance(int codePoint, int scale) {
+        if (codePoint == ' ') return 4 * scale;
+        if (isBitmapGlyph(codePoint)) return Math.max(2, glyphWidth(codePoint) + 1) * scale;
+        return Math.max(scale * 6, MinecraftUiFont.textWidth(new String(Character.toChars(codePoint)), scale * 8f));
     }
 
-    private static int glyphWidth(char ch) {
-        return WIDTH_CACHE.computeIfAbsent((int) normalize(ch), MinecraftFont::scanGlyphWidth);
+    private static int glyphWidth(int codePoint) {
+        return WIDTH_CACHE.computeIfAbsent(normalize(codePoint), MinecraftFont::scanGlyphWidth);
     }
 
     private static int scanGlyphWidth(int code) {
@@ -98,8 +117,11 @@ final class MinecraftFont {
         });
     }
 
-    private static int normalize(char ch) {
-        if (ch >= 0 && ch <= 255) return ch;
-        return '?';
+    private static boolean isBitmapGlyph(int codePoint) {
+        return codePoint >= 0 && codePoint <= 255;
+    }
+
+    private static int normalize(int codePoint) {
+        return isBitmapGlyph(codePoint) ? codePoint : '?';
     }
 }

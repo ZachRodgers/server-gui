@@ -16,5 +16,7 @@
 /home/Zach/MineCraft/Repos/server-gui/src/main/java/com/zach/minecraft/servergui/ui/MinecraftScrollBarUI.java
 /home/Zach/MineCraft/Repos/server-gui/src/main/java/com/zach/minecraft/servergui/ui/MinecraftTextField.java
 /home/Zach/MineCraft/Repos/server-gui/src/main/java/com/zach/minecraft/servergui/ui/MinecraftTheme.java
+/home/Zach/MineCraft/Repos/server-gui/src/main/java/com/zach/minecraft/servergui/ui/MinecraftUiFont.java
+/home/Zach/MineCraft/Repos/server-gui/src/main/java/com/zach/minecraft/servergui/ui/PlayerHeadCache.java
 /home/Zach/MineCraft/Repos/server-gui/src/main/java/com/zach/minecraft/servergui/ui/SimpleDocumentListener.java
 /home/Zach/MineCraft/Repos/server-gui/src/main/java/com/zach/minecraft/servergui/util/AnsiUtil.java

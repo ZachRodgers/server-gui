@@ -7,6 +7,9 @@ A standalone Java desktop wrapper for a Minecraft server process. It hides the s
 - player list
 - TPS chart
 - Java heap chart for the child server process
+- mock mode for testing the UI without a real server jar
+- Minecraft-inspired window chrome, widgets, and icon
+- player head thumbnails in the online player list
 
 ## Run
 
@@ -29,6 +32,8 @@ If it sees a jar like `paper-1.21.10-130.jar`, `spigot-...jar`, or `server.jar`,
 
 Only edit the config if you want to change memory or point at a different startup command.
 
+If no supported server jar is detected on first run, the app stays in mock mode and generates fake log/player/TPS/heap activity so you can test the UI safely.
+
 ## Example Config
 
 ```properties
@@ -47,12 +52,14 @@ Notes:
 - `list` and `tps` polling work best on Paper or compatible servers.
 - Heap metrics use `jcmd` against the launched Java child process.
 - If no server jar is detected on first run, the app stays in mock mode until you edit `server-wrapper.properties`.
+- The current builds use a safe local font fallback for text rendering stability. The Minecraft-style look currently comes from the textures, layout, and icon rather than a bundled in-game font renderer.
+- Player faces are fetched from `https://mineskin.eu/helm/<PLAYERNAME>` for the online player list.
 
 ## Current state
 
-This is a functional starter repo, not a finished product. The main architecture is in place and ready for refinement:
+This is a functional desktop wrapper with the main architecture in place. Areas still worth refining:
 
-- better theme and icons
+- final polish on the Minecraft-style theme
 - richer event parsing
 - server profiles
 - per-world/player stats

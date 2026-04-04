@@ -1,17 +1,19 @@
 package com.zach.minecraft.servergui.ui;
 
 import java.awt.Dimension;
+import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Insets;
 import javax.swing.JButton;
 
 final class MinecraftButton extends JButton {
-    private final int scale;
+    private final int fontScale;
+    private boolean smallCaps = true;
 
-    MinecraftButton(String text, int scale) {
+    MinecraftButton(String text, int fontScale) {
         super(text);
-        this.scale = scale;
+        this.fontScale = fontScale;
         setOpaque(false);
         setBorderPainted(false);
         setContentAreaFilled(false);
@@ -22,15 +24,24 @@ final class MinecraftButton extends JButton {
 
     @Override
     public Dimension getPreferredSize() {
-        int width = Math.max(120, MinecraftFont.textWidth(getText(), scale) + (18 * scale));
-        int height = 20 * scale;
+        float fontSize = MinecraftUiFont.scaledSize(fontScale);
+        int textWidth = MinecraftUiFont.textWidth(displayText(), fontSize);
+        int width = Math.max(72, textWidth + (12 * fontScale));
+        width += (fontScale - (width % fontScale)) % fontScale;
+        int height = 20 * fontScale;
         return new Dimension(width, height);
+    }
+
+    void setSmallCaps(boolean smallCaps) {
+        this.smallCaps = smallCaps;
+        revalidate();
+        repaint();
     }
 
     @Override
     protected void paintComponent(Graphics graphics) {
         Graphics2D g2 = (Graphics2D) graphics.create();
-        MinecraftTheme.drawHorizontalSlice(
+        MinecraftTheme.drawWidgetSprite(
                 g2,
                 !isEnabled() ? MinecraftTheme.BUTTON_DISABLED : getModel().isRollover() || getModel().isPressed()
                         ? MinecraftTheme.BUTTON_HOVER
@@ -38,22 +49,21 @@ final class MinecraftButton extends JButton {
                 0,
                 0,
                 getWidth(),
-                getHeight(),
-                2
+                getHeight()
         );
-        String text = getText() == null ? "" : getText().toUpperCase();
-        int textWidth = MinecraftFont.textWidth(text, scale);
+        float fontSize = MinecraftUiFont.scaledSize(fontScale);
+        String text = displayText();
+        FontMetrics metrics = g2.getFontMetrics(MinecraftUiFont.font(fontSize));
+        int textWidth = metrics.stringWidth(text);
         int textX = (getWidth() - textWidth) / 2;
-        int textY = (getHeight() - MinecraftFont.lineHeight(scale)) / 2 + (getModel().isPressed() ? scale : 0);
-        MinecraftFont.drawString(
-                g2,
-                text,
-                textX,
-                textY,
-                scale,
-                isEnabled() ? MinecraftTheme.PANEL_TEXT : MinecraftTheme.TEXT_MUTED,
-                true
-        );
+        int pressOffset = getModel().isPressed() ? Math.max(1, fontScale / 2) : 0;
+        int baseline = (getHeight() - metrics.getHeight()) / 2 + metrics.getAscent() + pressOffset;
+        MinecraftUiFont.draw(g2, text, textX, baseline, fontSize, isEnabled() ? MinecraftTheme.PANEL_TEXT : MinecraftTheme.TEXT_MUTED, true);
         g2.dispose();
+    }
+
+    private String displayText() {
+        String value = getText() == null ? "" : getText();
+        return smallCaps ? MinecraftUiFont.toSmallCaps(value) : value;
     }
 }

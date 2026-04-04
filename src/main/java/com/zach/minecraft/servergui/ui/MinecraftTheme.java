@@ -69,13 +69,52 @@ final class MinecraftTheme {
         g2.drawImage(image.getScaledInstance(width, height, Image.SCALE_FAST), x, y, null);
     }
 
-    static void drawHorizontalSlice(Graphics2D g2, BufferedImage image, int x, int y, int width, int height, int edge) {
+    static void drawWidgetSprite(Graphics2D g2, BufferedImage image, int x, int y, int width, int height) {
         applyPixelRendering(g2);
         int srcW = image.getWidth();
         int srcH = image.getHeight();
-        int destEdge = Math.max(edge, Math.min(width / 2, height / 2));
-        g2.drawImage(image, x, y, x + destEdge, y + height, 0, 0, edge, srcH, null);
-        g2.drawImage(image, x + destEdge, y, x + width - destEdge, y + height, edge, 0, srcW - edge, srcH, null);
-        g2.drawImage(image, x + width - destEdge, y, x + width, y + height, srcW - edge, 0, srcW, srcH, null);
+        int scale = Math.max(1, height / srcH);
+        int logicalWidth = Math.max(2, Math.round((float) width / scale));
+        int leftLogical = logicalWidth / 2;
+        int rightLogical = logicalWidth - leftLogical;
+        int leftSrc = Math.min(leftLogical, srcW);
+        int rightSrc = Math.min(rightLogical, srcW - leftSrc);
+        int leftDest = leftLogical * scale;
+        int rightDest = width - leftDest;
+
+        if (rightSrc <= 0) {
+            g2.drawImage(image, x, y, x + width, y + height, 0, 0, Math.min(logicalWidth, srcW), srcH, null);
+            return;
+        }
+
+        g2.drawImage(image, x, y, x + leftDest, y + height, 0, 0, leftSrc, srcH, null);
+        g2.drawImage(image, x + leftDest, y, x + width, y + height, srcW - rightSrc, 0, srcW, srcH, null);
+    }
+
+    static void drawTextFieldSprite(Graphics2D g2, BufferedImage image, int x, int y, int width, int height) {
+        applyPixelRendering(g2);
+        int srcW = image.getWidth();
+        int srcH = image.getHeight();
+        int scale = Math.max(1, height / srcH);
+        int cap = Math.max(2, 4 * scale);
+        int srcCap = Math.max(2, Math.min(4, srcW / 4));
+        int middleStart = srcCap;
+        int middleEnd = srcW - srcCap;
+
+        g2.drawImage(image, x, y, x + cap, y + height, 0, 0, srcCap, srcH, null);
+        g2.drawImage(image, x + width - cap, y, x + width, y + height, srcW - srcCap, 0, srcW, srcH, null);
+
+        int midWidth = Math.max(0, width - (cap * 2));
+        if (midWidth <= 0) return;
+
+        int destX = x + cap;
+        int srcTileWidth = Math.max(1, middleEnd - middleStart);
+        while (midWidth > 0) {
+            int drawWidth = Math.min(scale, midWidth);
+            g2.drawImage(image, destX, y, destX + drawWidth, y + height, middleStart, 0, middleStart + 1, srcH, null);
+            destX += drawWidth;
+            midWidth -= drawWidth;
+            if (srcTileWidth <= 1) break;
+        }
     }
 }

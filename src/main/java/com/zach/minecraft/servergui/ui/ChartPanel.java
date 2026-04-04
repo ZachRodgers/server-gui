@@ -1,10 +1,9 @@
 package com.zach.minecraft.servergui.ui;
 
-import java.awt.BasicStroke;
 import java.awt.Color;
+import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
-import java.awt.geom.Path2D;
 import java.text.DecimalFormat;
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -43,11 +42,13 @@ public final class ChartPanel extends JPanel {
         Graphics2D g2 = (Graphics2D) graphics.create();
         MinecraftTheme.paintTiledBackground(g2, MinecraftTheme.LIST_BG, 0, 0, getWidth(), getHeight(), 0.95f);
 
-        int scale = 2;
-        MinecraftFont.drawString(g2, title.toUpperCase(), 8, 6, scale, MinecraftTheme.PANEL_TEXT, true);
+        float fontSize = MinecraftUiFont.scaledSize(2);
+        FontMetrics metrics = g2.getFontMetrics(MinecraftUiFont.font(fontSize));
+        int baseline = 8 + metrics.getAscent();
+        MinecraftUiFont.draw(g2, MinecraftUiFont.toSmallCaps(title), 8, baseline, fontSize, MinecraftTheme.PANEL_TEXT, true);
         String value = format.format(latestValue) + suffix;
-        int valueWidth = MinecraftFont.textWidth(value, scale);
-        MinecraftFont.drawString(g2, value, getWidth() - valueWidth - 8, 6, scale, lineColor, true);
+        int valueWidth = MinecraftUiFont.textWidth(value, fontSize);
+        MinecraftUiFont.draw(g2, value, getWidth() - valueWidth - 8, baseline, fontSize, lineColor, true);
 
         int left = 10;
         int right = getWidth() - 10;
@@ -55,44 +56,40 @@ public final class ChartPanel extends JPanel {
         int bottom = getHeight() - 10;
 
         g2.setColor(MinecraftTheme.TEXT_DARK);
-        g2.setStroke(new BasicStroke(1f));
         for (int i = 0; i <= 3; i++) {
             int y = top + i * (bottom - top) / 3;
             g2.drawLine(left, y, right, y);
         }
 
         if (values.size() > 1) {
-            Path2D fill = new Path2D.Double();
-            Path2D line = new Path2D.Double();
             int index = 0;
             int span = Math.max(1, values.size() - 1);
-            double startX = left;
+            int previousX = left;
+            int previousY = bottom;
+            boolean first = true;
 
             for (double point : values) {
-                double x = left + (double) (right - left) * index / span;
+                int x = left + (right - left) * index / span;
                 double normalized = Math.min(1.0, point / maxValue);
-                double y = bottom - normalized * (bottom - top);
-                if (index == 0) {
-                    fill.moveTo(x, y);
-                    line.moveTo(x, y);
-                    startX = x;
-                } else {
-                    fill.lineTo(x, y);
-                    line.lineTo(x, y);
+                int y = bottom - (int) Math.round(normalized * (bottom - top));
+
+                if (!first) {
+                    g2.setColor(new Color(lineColor.getRed(), lineColor.getGreen(), lineColor.getBlue(), 70));
+                    g2.fillRect(previousX, previousY, Math.max(1, x - previousX), bottom - previousY);
+                    g2.fillRect(previousX, y, Math.max(1, x - previousX), bottom - y);
+
+                    g2.setColor(lineColor);
+                    g2.fillRect(previousX, previousY - 1, Math.max(1, x - previousX), 2);
+                    g2.fillRect(x - 1, Math.min(previousY, y), 2, Math.abs(y - previousY) + 1);
                 }
-                if (index == values.size() - 1) {
-                    fill.lineTo(x, bottom);
-                    fill.lineTo(startX, bottom);
-                    fill.closePath();
-                }
+
+                previousX = x;
+                previousY = y;
+                first = false;
                 index++;
             }
-
-            g2.setColor(new Color(lineColor.getRed(), lineColor.getGreen(), lineColor.getBlue(), 70));
-            g2.fill(fill);
             g2.setColor(lineColor);
-            g2.setStroke(new BasicStroke(2f));
-            g2.draw(line);
+            g2.fillRect(previousX - 1, previousY - 1, 2, 2);
         }
         g2.dispose();
     }
