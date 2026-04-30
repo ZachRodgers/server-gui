@@ -1,6 +1,7 @@
 package com.zach.minecraft.servergui.ui;
 
 import com.zach.minecraft.servergui.config.AppConfig;
+import com.zach.minecraft.servergui.config.ServerProperties;
 import com.zach.minecraft.servergui.model.HeapSample;
 import com.zach.minecraft.servergui.model.LogEntry;
 import com.zach.minecraft.servergui.model.LogEntry.Category;
@@ -12,13 +13,10 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
-import java.awt.Frame;
 import java.awt.FontMetrics;
 import java.awt.FlowLayout;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
-import java.awt.GridBagConstraints;
-import java.awt.GridBagLayout;
 import java.awt.Image;
 import java.awt.KeyboardFocusManager;
 import java.awt.Taskbar;
@@ -29,22 +27,24 @@ import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Pattern;
 import javax.swing.BorderFactory;
-import javax.swing.Box;
-import javax.swing.BoxLayout;
 import javax.swing.DefaultListModel;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JComponent;
-import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JList;
+import javax.swing.JMenuItem;
 import javax.swing.JLayeredPane;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollBar;
@@ -56,6 +56,7 @@ import javax.swing.RowFilter;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.border.EmptyBorder;
+import javax.imageio.ImageIO;
 import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableColumnModel;
 import javax.swing.table.TableRowSorter;
@@ -63,6 +64,8 @@ import javax.swing.table.TableRowSorter;
 public final class MainFrame extends JFrame {
     private static final int CONTROL_FONT_SCALE = 2;
     private static final double[] UI_ZOOM_STEPS = {0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0};
+    private static final Pattern PLAYER_NAME_PATTERN = Pattern.compile("[A-Za-z0-9_]{3,16}");
+    private static final Pattern OPS_NAME_PATTERN = Pattern.compile("\"name\"\\s*:\\s*\"([A-Za-z0-9_]{3,16})\"");
 
     private final ServerController controller;
     private final LogTableModel logModel = new LogTableModel();
@@ -89,9 +92,9 @@ public final class MainFrame extends JFrame {
     private final MinecraftTextField searchField = new MinecraftTextField("Search", 26, CONTROL_FONT_SCALE);
     private final MinecraftTextField commandField = new MinecraftTextField("Enter command", 32, CONTROL_FONT_SCALE);
     private final MinecraftLabel statusLabel = new MinecraftLabel("Offline", CONTROL_FONT_SCALE);
-    private final MinecraftLabel titleLabel;
-    private final MinecraftLabel subtitleLabel;
-    private final MinecraftLinkButton settingsButton = new MinecraftLinkButton("Edit");
+    private final MotdLabel titleLabel = new MotdLabel(3.5);
+    private final ServerIconView serverIconView = new ServerIconView();
+    private final MinecraftButton settingsButton = new MinecraftButton("Settings", CONTROL_FONT_SCALE);
 
     private final MinecraftButton startButton = new MinecraftButton("Start", CONTROL_FONT_SCALE);
     private final MinecraftButton stopButton = new MinecraftButton("Stop", CONTROL_FONT_SCALE);
@@ -112,8 +115,8 @@ public final class MainFrame extends JFrame {
         super(config.appTitle());
         this.config = config;
         this.controller = new ServerController(config);
-        this.titleLabel = new MinecraftLabel(config.appTitle(), 3);
-        this.subtitleLabel = new MinecraftLabel(config.mockMode() ? "mock mode" : config.workingDirectory().toString(), 2);
+        titleLabel.setMotd(resolveServerMotd(config));
+        serverIconView.setIcon(loadServerIcon(config));
 
         patchDefaults();
         setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
@@ -152,31 +155,14 @@ public final class MainFrame extends JFrame {
         JPanel top = new JPanel(new BorderLayout());
         top.setOpaque(false);
 
-        JPanel titles = new JPanel();
-        titles.setOpaque(false);
-        titles.setLayout(new BoxLayout(titles, BoxLayout.Y_AXIS));
-        JPanel metaRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
-        metaRow.setOpaque(false);
-
-        titleLabel.setSmallCaps(true);
-        subtitleLabel.setPixelColor(MinecraftTheme.TEXT_MUTED);
-        subtitleLabel.setShadow(false);
         statusLabel.setSmallCaps(true);
         settingsButton.addActionListener(e -> openSettingsDialog());
 
-        JPanel titleRow = new JPanel(new FlowLayout(FlowLayout.LEFT, MinecraftTheme.scale(8), 0));
-        titleRow.setOpaque(false);
-        titleRow.add(titleLabel);
-        titleRow.add(buildStatusPanel());
-
-        JPanel subtitleRow = new JPanel(new FlowLayout(FlowLayout.LEFT, MinecraftTheme.scale(8), 0));
-        subtitleRow.setOpaque(false);
-        subtitleRow.add(subtitleLabel);
-        subtitleRow.add(settingsButton);
-
-        titles.add(titleRow);
-        titles.add(Box.createVerticalStrut(MinecraftTheme.scale(4)));
-        titles.add(subtitleRow);
+        JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, MinecraftTheme.scale(12), 0));
+        left.setOpaque(false);
+        left.add(serverIconView);
+        left.add(titleLabel);
+        left.add(buildStatusPanel());
 
         JPanel controls = new JPanel(new FlowLayout(FlowLayout.RIGHT, MinecraftTheme.scale(8), 0));
         controls.setOpaque(false);
@@ -184,10 +170,36 @@ public final class MainFrame extends JFrame {
         controls.add(stopButton);
         controls.add(restartButton);
         controls.add(killButton);
+        controls.add(settingsButton);
 
-        top.add(titles, BorderLayout.WEST);
+        top.add(left, BorderLayout.WEST);
         top.add(controls, BorderLayout.EAST);
         return top;
+    }
+
+    private String resolveServerMotd(AppConfig config) {
+        if (config.mockMode()) return config.appTitle();
+        Path props = config.workingDirectory().resolve("server.properties");
+        return ServerProperties.readMotd(props)
+                .filter(s -> !s.isBlank())
+                .orElse(config.appTitle());
+    }
+
+    private BufferedImage loadServerIcon(AppConfig config) {
+        Path icon = config.workingDirectory().resolve("server-icon.png");
+        if (Files.exists(icon)) {
+            try (InputStream in = Files.newInputStream(icon)) {
+                BufferedImage image = ImageIO.read(in);
+                if (image != null) return image;
+            } catch (IOException ignored) {
+            }
+        }
+        return null;
+    }
+
+    private void refreshServerHeader() {
+        titleLabel.setMotd(resolveServerMotd(config));
+        serverIconView.setIcon(loadServerIcon(config));
     }
 
     private JComponent buildStatusPanel() {
@@ -409,6 +421,22 @@ public final class MainFrame extends JFrame {
         JList<String> list = new JList<>(playerModel);
         list.setOpaque(false);
         list.setCellRenderer(new PlayerCellRenderer());
+        list.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                if (e.isPopupTrigger()) showPlayerMenu(list, e);
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                if (e.isPopupTrigger()) showPlayerMenu(list, e);
+            }
+
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (SwingUtilities.isLeftMouseButton(e)) showPlayerMenu(list, e);
+            }
+        });
 
         JScrollPane scroller = new JScrollPane(list);
         scroller.setOpaque(false);
@@ -417,11 +445,62 @@ public final class MainFrame extends JFrame {
         scroller.getVerticalScrollBar().setUI(new MinecraftScrollBarUI());
         scroller.getHorizontalScrollBar().setUI(new MinecraftScrollBarUI());
         scroller.getVerticalScrollBar().setUnitIncrement(MinecraftTheme.scale(16));
-        scroller.setPreferredSize(new Dimension(MinecraftTheme.scale(300), MinecraftTheme.scale(180)));
+        scroller.setPreferredSize(new Dimension(MinecraftTheme.scale(300), MinecraftTheme.scale(220)));
         content.add(title, BorderLayout.NORTH);
         content.add(scroller, BorderLayout.CENTER);
         panel.add(content, BorderLayout.CENTER);
         return panel;
+    }
+
+    private void showPlayerMenu(JList<String> list, MouseEvent e) {
+        int index = list.locationToIndex(e.getPoint());
+        if (index < 0 || !list.getCellBounds(index, index).contains(e.getPoint())) return;
+
+        String playerName = playerModel.getElementAt(index);
+        if (!PLAYER_NAME_PATTERN.matcher(playerName).matches()) return;
+
+        list.setSelectedIndex(index);
+        JPopupMenu popup = new JPopupMenu();
+        popup.setBorder(BorderFactory.createMatteBorder(1, 1, 1, 1, MinecraftTheme.BORDER_LIGHT));
+        popup.setBackground(MinecraftTheme.BG);
+        if (isPlayerOpped(playerName)) {
+            popup.add(playerActionItem("Deop", "deop", playerName));
+        } else {
+            popup.add(playerActionItem("Op", "op", playerName));
+        }
+        popup.add(new JSeparator());
+        popup.add(playerActionItem("Kick", "kick", playerName));
+        popup.add(playerActionItem("Ban", "ban", playerName));
+        popup.show(list, e.getX(), e.getY());
+    }
+
+    private JMenuItem playerActionItem(String label, String command, String playerName) {
+        JMenuItem item = new MinecraftMenuItem(label, MinecraftTheme.PANEL_TEXT);
+        item.addActionListener(e -> runPlayerAction(command, playerName));
+        return item;
+    }
+
+    private void runPlayerAction(String command, String playerName) {
+        if (!PLAYER_NAME_PATTERN.matcher(playerName).matches()) {
+            return;
+        }
+        controller.sendCommand(command + " " + playerName);
+    }
+
+    private boolean isPlayerOpped(String playerName) {
+        Path opsPath = config.workingDirectory().resolve("ops.json");
+        if (Files.notExists(opsPath)) return false;
+        try {
+            String ops = Files.readString(opsPath);
+            var matcher = OPS_NAME_PATTERN.matcher(ops);
+            while (matcher.find()) {
+                if (matcher.group(1).equalsIgnoreCase(playerName)) {
+                    return true;
+                }
+            }
+        } catch (IOException ignored) {
+        }
+        return false;
     }
 
     private JSplitPane buildSplitPane(int orientation, Component first, Component second, double resizeWeight) {
@@ -570,16 +649,15 @@ public final class MainFrame extends JFrame {
     }
 
     private void openSettingsDialog() {
-        SettingsDialog dialog = new SettingsDialog(this, config);
+        SettingsDialog dialog = new SettingsDialog(this, config, this::applySettings);
         dialog.setVisible(true);
     }
 
-    private void applySettings(AppConfig updatedConfig, boolean restartServer) {
+    void applySettings(AppConfig updatedConfig, boolean restartServer) {
         this.config = updatedConfig;
         controller.reconfigure(updatedConfig);
         setTitle(updatedConfig.appTitle());
-        titleLabel.setPixelText(updatedConfig.appTitle());
-        subtitleLabel.setPixelText(updatedConfig.mockMode() ? "mock mode" : updatedConfig.workingDirectory().toString());
+        refreshServerHeader();
         if (restartServer && controller.isRunning()) {
             controller.restart();
         }
@@ -787,7 +865,7 @@ public final class MainFrame extends JFrame {
 
         @Override
         public Dimension getPreferredSize() {
-            return new Dimension(MinecraftTheme.scale(100), MinecraftTheme.scale(34));
+            return new Dimension(MinecraftTheme.scale(160), MinecraftTheme.scale(51));
         }
 
         @Override
@@ -796,13 +874,14 @@ public final class MainFrame extends JFrame {
             g2.setColor(selected ? MinecraftTheme.SELECTION : MinecraftTheme.BG);
             g2.fillRect(0, 0, getWidth(), getHeight());
             BufferedImage image = PlayerHeadCache.get(value, this::repaint);
-            int head = MinecraftTheme.scale(24);
-            int pad = MinecraftTheme.scale(5);
+            int head = MinecraftTheme.scale(36);
+            int pad = MinecraftTheme.scale(8);
+            MinecraftTheme.applyPixelRendering(g2);
             g2.drawImage(image, pad, pad, head, head, null);
-            float fontSize = MinecraftUiFont.scaledSize(2);
+            float fontSize = MinecraftUiFont.scaledSize(3);
             FontMetrics metrics = g2.getFontMetrics(MinecraftUiFont.font(fontSize));
             int baseline = (getHeight() - metrics.getHeight()) / 2 + metrics.getAscent();
-            MinecraftUiFont.draw(g2, value, pad + head + MinecraftTheme.scale(7), baseline, fontSize, MinecraftTheme.PANEL_TEXT, false);
+            MinecraftUiFont.draw(g2, value, pad + head + MinecraftTheme.scale(10), baseline, fontSize, MinecraftTheme.PANEL_TEXT, false);
             g2.dispose();
         }
     }
@@ -864,177 +943,80 @@ public final class MainFrame extends JFrame {
 
     private record WrappedLine(List<AnsiUtil.Segment> segments) {}
 
-    private final class SettingsDialog extends JDialog {
-        private final MinecraftTextField titleField;
-        private final MinecraftTextField playersPollField;
-        private final MinecraftTextField tpsPollField;
-        private final MinecraftTextField memoryPollField;
-        private final MinecraftTextField minHeapField;
-        private final MinecraftTextField maxHeapField;
-        private final MinecraftButton applyButton = new MinecraftButton("Apply", CONTROL_FONT_SCALE);
-        private final MinecraftButton applyRestartButton = new MinecraftButton("Apply and Restart", CONTROL_FONT_SCALE);
-        private final MinecraftButton cancelButton = new MinecraftButton("Cancel", CONTROL_FONT_SCALE);
-        private final MinecraftLabel noteLabel = new MinecraftLabel("polls apply now, heap changes need restart", 1);
+    private static final class ServerIconView extends JComponent {
+        private BufferedImage icon;
 
-        private SettingsDialog(Frame owner, AppConfig config) {
-            super(owner, "Settings", true);
-            this.titleField = new MinecraftTextField("Window name", 24, CONTROL_FONT_SCALE);
-            this.playersPollField = new MinecraftTextField("seconds", 8, CONTROL_FONT_SCALE);
-            this.tpsPollField = new MinecraftTextField("seconds", 8, CONTROL_FONT_SCALE);
-            this.memoryPollField = new MinecraftTextField("seconds", 8, CONTROL_FONT_SCALE);
-            this.minHeapField = new MinecraftTextField("3G", 8, CONTROL_FONT_SCALE);
-            this.maxHeapField = new MinecraftTextField("6G", 8, CONTROL_FONT_SCALE);
-
-            titleField.setText(config.appTitle());
-            playersPollField.setText(String.valueOf(config.playerPollSeconds()));
-            tpsPollField.setText(String.valueOf(config.tpsPollSeconds()));
-            memoryPollField.setText(String.valueOf(config.heapPollSeconds()));
-            minHeapField.setText(config.minHeap());
-            maxHeapField.setText(config.maxHeap());
-            noteLabel.setPixelColor(MinecraftTheme.TEXT_MUTED);
-            noteLabel.setShadow(false);
-
-            playersPollField.getDocument().addDocumentListener(SimpleDocumentListener.onChange(this::refreshActions));
-            tpsPollField.getDocument().addDocumentListener(SimpleDocumentListener.onChange(this::refreshActions));
-            memoryPollField.getDocument().addDocumentListener(SimpleDocumentListener.onChange(this::refreshActions));
-            minHeapField.getDocument().addDocumentListener(SimpleDocumentListener.onChange(this::refreshActions));
-            maxHeapField.getDocument().addDocumentListener(SimpleDocumentListener.onChange(this::refreshActions));
-            titleField.getDocument().addDocumentListener(SimpleDocumentListener.onChange(this::refreshActions));
-
-            setContentPane(buildContent());
-            refreshActions();
-            pack();
-            setMinimumSize(new Dimension(MinecraftTheme.scale(560), MinecraftTheme.scale(420)));
-            setLocationRelativeTo(owner);
+        ServerIconView() {
+            setOpaque(false);
         }
 
-        private JComponent buildContent() {
-            MinecraftPanel root = new MinecraftPanel(true, 0.97f);
-            root.setBorder(new EmptyBorder(MinecraftTheme.scale(12), MinecraftTheme.scale(12), MinecraftTheme.scale(12), MinecraftTheme.scale(12)));
-
-            JPanel form = new JPanel(new GridBagLayout());
-            form.setOpaque(false);
-            GridBagConstraints gbc = new GridBagConstraints();
-            gbc.gridx = 0;
-            gbc.gridy = 0;
-            gbc.anchor = GridBagConstraints.WEST;
-            gbc.fill = GridBagConstraints.HORIZONTAL;
-            gbc.weightx = 0;
-            gbc.insets = new java.awt.Insets(0, 0, MinecraftTheme.scale(8), MinecraftTheme.scale(10));
-
-            addField(form, gbc, "Name", titleField);
-            addField(form, gbc, "Poll players", playersPollField, "seconds");
-            addField(form, gbc, "Poll TPS", tpsPollField, "seconds");
-            addField(form, gbc, "Poll memory", memoryPollField, "seconds");
-            addField(form, gbc, "Min heap", minHeapField);
-            addField(form, gbc, "Max heap", maxHeapField);
-
-            JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, MinecraftTheme.scale(8), 0));
-            actions.setOpaque(false);
-            applyButton.addActionListener(e -> save(false));
-            applyRestartButton.addActionListener(e -> save(true));
-            cancelButton.addActionListener(e -> dispose());
-            actions.add(cancelButton);
-            actions.add(applyButton);
-            actions.add(applyRestartButton);
-
-            JPanel footer = new JPanel(new BorderLayout(0, MinecraftTheme.scale(8)));
-            footer.setOpaque(false);
-            footer.add(noteLabel, BorderLayout.NORTH);
-            footer.add(actions, BorderLayout.SOUTH);
-
-            root.add(form, BorderLayout.CENTER);
-            root.add(footer, BorderLayout.SOUTH);
-            return root;
+        void setIcon(BufferedImage icon) {
+            this.icon = icon;
+            revalidate();
+            repaint();
         }
 
-        private void addField(JPanel form, GridBagConstraints gbc, String labelText, JComponent field) {
-            addField(form, gbc, labelText, field, null);
+        @Override
+        public Dimension getPreferredSize() {
+            int size = MinecraftTheme.scale(44);
+            return new Dimension(size, size);
         }
 
-        private void addField(JPanel form, GridBagConstraints gbc, String labelText, JComponent field, String suffixText) {
-            MinecraftLabel label = new MinecraftLabel(labelText, 2);
-            label.setSmallCaps(true);
-            gbc.gridx = 0;
-            gbc.weightx = 0;
-            form.add(label, gbc);
-            gbc.gridx = 1;
-            gbc.weightx = 1;
-            form.add(field, gbc);
-            if (suffixText != null) {
-                MinecraftLabel suffix = new MinecraftLabel(suffixText, 2);
-                suffix.setPixelColor(MinecraftTheme.TEXT_MUTED);
-                suffix.setShadow(false);
-                gbc.gridx = 2;
-                gbc.weightx = 0;
-                form.add(suffix, gbc);
-            }
-            gbc.gridy++;
+        @Override
+        protected void paintComponent(Graphics graphics) {
+            super.paintComponent(graphics);
+            int size = Math.min(getWidth(), getHeight());
+            if (size <= 0) return;
+            Graphics2D g2 = (Graphics2D) graphics.create();
+            MinecraftTheme.applyPixelRendering(g2);
+            BufferedImage source = icon != null ? icon : MinecraftTheme.ICON;
+            int x = (getWidth() - size) / 2;
+            int y = (getHeight() - size) / 2;
+            g2.drawImage(source, x, y, size, size, null);
+            g2.dispose();
+        }
+    }
+
+    private static final class MinecraftMenuItem extends JMenuItem {
+        private final Color textColor;
+
+        MinecraftMenuItem(String text, Color textColor) {
+            super(text);
+            this.textColor = textColor;
+            setOpaque(false);
+            setArmed(false);
+            setBorderPainted(false);
+            setFocusPainted(false);
+            setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
         }
 
-        private void save(boolean restartServer) {
-            try {
-                String appTitle = requireText(titleField.getText(), "Name");
-                int playerPoll = parseNonNegative(playersPollField.getText(), "Poll players");
-                int tpsPoll = parseNonNegative(tpsPollField.getText(), "Poll TPS");
-                int memoryPoll = parseNonNegative(memoryPollField.getText(), "Poll memory");
-                String minHeap = requireText(minHeapField.getText(), "Min heap");
-                String maxHeap = requireText(maxHeapField.getText(), "Max heap");
-                validateHeap(minHeap, maxHeap);
-
-                AppConfig updated = config.save(appTitle, playerPoll, tpsPoll, memoryPoll, minHeap, maxHeap);
-                applySettings(updated, restartServer);
-                dispose();
-            } catch (IllegalArgumentException exception) {
-                JOptionPane.showMessageDialog(this, exception.getMessage(), "Invalid settings", JOptionPane.ERROR_MESSAGE);
-            } catch (IllegalStateException exception) {
-                JOptionPane.showMessageDialog(this, exception.getMessage(), "Save failed", JOptionPane.ERROR_MESSAGE);
-            }
+        @Override
+        public Dimension getPreferredSize() {
+            float fontSize = MinecraftUiFont.scaledSize(2);
+            int width = MinecraftUiFont.textWidth(MinecraftUiFont.toSmallCaps(getText()), fontSize) + MinecraftTheme.scale(24);
+            int height = Math.max(MinecraftTheme.scale(24), MinecraftUiFont.lineHeight(fontSize) + MinecraftTheme.scale(8));
+            return new Dimension(width, height);
         }
 
-        private String requireText(String value, String name) {
-            String trimmed = value == null ? "" : value.trim();
-            if (trimmed.isBlank()) throw new IllegalArgumentException(name + " cannot be blank.");
-            return trimmed;
-        }
+        @Override
+        protected void paintComponent(Graphics graphics) {
+            Graphics2D g2 = (Graphics2D) graphics.create();
+            g2.setColor(getModel().isArmed() || getModel().isRollover() ? MinecraftTheme.SELECTION : MinecraftTheme.BG);
+            g2.fillRect(0, 0, getWidth(), getHeight());
 
-        private int parseNonNegative(String value, String name) {
-            try {
-                int parsed = Integer.parseInt(requireText(value, name));
-                if (parsed < 0) throw new IllegalArgumentException(name + " must be 0 or greater.");
-                return parsed;
-            } catch (NumberFormatException exception) {
-                throw new IllegalArgumentException(name + " must be a whole number.");
-            }
-        }
-
-        private void validateHeap(String minHeap, String maxHeap) {
-            long minMb = parseHeapMb(minHeap, "Min heap");
-            long maxMb = parseHeapMb(maxHeap, "Max heap");
-            if (minMb > maxMb) {
-                throw new IllegalArgumentException("Min heap cannot be larger than max heap.");
-            }
-        }
-
-        private long parseHeapMb(String value, String name) {
-            String trimmed = requireText(value, name).toUpperCase(Locale.ROOT);
-            if (!trimmed.matches("\\d+[KMG]")) {
-                throw new IllegalArgumentException(name + " must use a number followed by K, M, or G.");
-            }
-            long amount = Long.parseLong(trimmed.substring(0, trimmed.length() - 1));
-            char unit = trimmed.charAt(trimmed.length() - 1);
-            return switch (unit) {
-                case 'G' -> amount * 1024L;
-                case 'M' -> amount;
-                case 'K' -> Math.max(1L, amount / 1024L);
-                default -> throw new IllegalArgumentException(name + " must use K, M, or G.");
-            };
-        }
-
-        private void refreshActions() {
-            boolean heapChanged = !minHeapField.getText().trim().equalsIgnoreCase(config.minHeap())
-                    || !maxHeapField.getText().trim().equalsIgnoreCase(config.maxHeap());
-            applyRestartButton.setEnabled(heapChanged);
+            float fontSize = MinecraftUiFont.scaledSize(2);
+            FontMetrics metrics = g2.getFontMetrics(MinecraftUiFont.font(fontSize));
+            int baseline = (getHeight() - metrics.getHeight()) / 2 + metrics.getAscent();
+            MinecraftUiFont.draw(
+                    g2,
+                    MinecraftUiFont.toSmallCaps(getText()),
+                    MinecraftTheme.scale(10),
+                    baseline,
+                    fontSize,
+                    textColor,
+                    false
+            );
+            g2.dispose();
         }
     }
 }
