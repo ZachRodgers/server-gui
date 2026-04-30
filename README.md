@@ -6,11 +6,11 @@
 
 ## Installation
 
-1. Copy `server-gui-0.1.1.jar` from `target/` into your server folder.
+1. Copy `server-gui-0.2.0.jar` from `target/` into your server folder.
 2. Run it once:
 
 ```bash
-java -jar server-gui-0.1.1.jar
+java -Dsun.awt.X11.XWMClass=com-servergui-Main -jar server-gui-0.2.0.jar
 ```
 
 On first launch, the wrapper will:
@@ -36,7 +36,7 @@ if [ -z "$JAR" ]; then
   echo "server-gui jar not found."
   exit 1
 fi
-nohup java -jar "$JAR" &>/dev/null &
+nohup java -Dsun.awt.X11.XWMClass=com-servergui-Main -jar "$JAR" &>/dev/null &
 ```
 
 ## What It Does
@@ -63,7 +63,7 @@ On Linux, the app also writes a desktop entry after launch, so you may be able t
 
 ## File Structure
 
-- `target/server-gui-0.1.1.jar`: packaged wrapper jar
+- `target/server-gui-0.2.0.jar`: packaged wrapper jar
 - `server-wrapper.properties`: generated wrapper config in the server folder
 - `start.sh`: generated Unix launcher script
 - `start.bat`: generated Windows launcher script
