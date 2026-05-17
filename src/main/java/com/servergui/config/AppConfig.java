@@ -21,7 +21,9 @@ public record AppConfig(
         Path workingDirectory,
         int playerPollSeconds,
         int tpsPollSeconds,
-        int heapPollSeconds
+        int heapPollSeconds,
+        boolean gitSyncEnabled,
+        String gitRepository
 ) {
     private static final String FILE_NAME = "server-wrapper.properties";
 
@@ -47,8 +49,17 @@ public record AppConfig(
         int playerPollSeconds = Integer.parseInt(properties.getProperty("poll.players.seconds", "30"));
         int tpsPollSeconds    = Integer.parseInt(properties.getProperty("poll.tps.seconds",    "30"));
         int heapPollSeconds   = Integer.parseInt(properties.getProperty("poll.heap.seconds",   "20"));
+        boolean gitSyncEnabled = Boolean.parseBoolean(properties.getProperty("git.sync.enabled", "false"));
+        String gitRepository  = properties.getProperty("git.repository", "");
 
-        return new AppConfig(normalizedBaseDirectory, appTitle, mockMode, serverCommand, workingDirectory, playerPollSeconds, tpsPollSeconds, heapPollSeconds);
+        return new AppConfig(normalizedBaseDirectory, appTitle, mockMode, serverCommand, workingDirectory,
+                playerPollSeconds, tpsPollSeconds, heapPollSeconds, gitSyncEnabled, gitRepository);
+    }
+
+    /** Absolute path to the git repository directory, or empty when none is configured. */
+    public Optional<Path> gitRepositoryPath() {
+        if (gitRepository == null || gitRepository.isBlank()) return Optional.empty();
+        return Optional.of(baseDirectory.resolve(gitRepository).normalize());
     }
 
     public List<String> commandTokens() {
@@ -93,7 +104,45 @@ public record AppConfig(
             throw new IllegalStateException("Failed to save " + configPath, exception);
         }
 
-        return new AppConfig(baseDirectory, appTitle, mockMode, updatedCommand, workingDirectory, playerPollSeconds, tpsPollSeconds, heapPollSeconds);
+        return new AppConfig(baseDirectory, appTitle, mockMode, updatedCommand, workingDirectory,
+                playerPollSeconds, tpsPollSeconds, heapPollSeconds, gitSyncEnabled, gitRepository);
+    }
+
+    /** Persist only the git-sync settings, preserving every other key. */
+    public AppConfig saveGitSync(boolean enabled, Path repository) {
+        Properties properties = new Properties();
+        Path configPath = configPath();
+        if (Files.exists(configPath)) {
+            try (InputStream inputStream = Files.newInputStream(configPath)) {
+                properties.load(inputStream);
+            } catch (IOException exception) {
+                throw new IllegalStateException("Failed to load " + configPath, exception);
+            }
+        }
+
+        String relativeRepository = relativizePath(repository);
+        properties.setProperty("git.sync.enabled", String.valueOf(enabled));
+        properties.setProperty("git.repository", relativeRepository);
+
+        try (OutputStream outputStream = Files.newOutputStream(configPath)) {
+            properties.store(outputStream, "Minecraft server GUI configuration.");
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed to save " + configPath, exception);
+        }
+
+        return new AppConfig(baseDirectory, appTitle, mockMode, serverCommand, workingDirectory,
+                playerPollSeconds, tpsPollSeconds, heapPollSeconds, enabled, relativeRepository);
+    }
+
+    private String relativizePath(Path target) {
+        if (target == null) return "";
+        Path normalized = target.toAbsolutePath().normalize();
+        try {
+            Path relative = baseDirectory.relativize(normalized);
+            return relative.toString().isBlank() ? "." : relative.toString();
+        } catch (IllegalArgumentException ignored) {
+            return normalized.toString();
+        }
     }
 
     private String relativizeWorkingDirectory() {

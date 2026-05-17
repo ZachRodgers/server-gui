@@ -29,6 +29,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.BiConsumer;
@@ -38,6 +39,7 @@ import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
+import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -71,9 +73,11 @@ final class SettingsDialog extends JDialog {
         ConsoleTab consoleTab = new ConsoleTab(config);
         ServerPropertiesTab propsTab = new ServerPropertiesTab(config);
         PluginsTab pluginsTab = new PluginsTab(config);
+        GitSyncTab gitSyncTab = new GitSyncTab(config);
         tabs.add(consoleTab);
         tabs.add(propsTab);
         tabs.add(pluginsTab);
+        tabs.add(gitSyncTab);
 
         for (Tab tab : tabs) {
             content.add(tab.component(), tab.id());
@@ -849,6 +853,140 @@ final class SettingsDialog extends JDialog {
                 return;
             }
             onChange.run();
+        }
+    }
+
+    // ── Git Sync tab ───────────────────────────────────────────────────────
+    private static final class GitSyncTab implements Tab {
+        private final JPanel panel = new JPanel(new BorderLayout());
+        private final AppConfig config;
+        private final JCheckBox enabledBox = new JCheckBox();
+        private final JTextField repoField = new JTextField(28);
+        private Path selectedRepo;
+
+        GitSyncTab(AppConfig config) {
+            this.config = config;
+            panel.setOpaque(false);
+
+            config.gitRepositoryPath().ifPresent(p -> selectedRepo = p);
+            if (selectedRepo == null) {
+                autoDetectRepo().ifPresent(p -> selectedRepo = p);
+            }
+            enabledBox.setOpaque(false);
+            enabledBox.setForeground(MinecraftTheme.PANEL_TEXT);
+            enabledBox.setSelected(config.gitSyncEnabled());
+
+            repoField.setEditable(false);
+            repoField.setOpaque(true);
+            repoField.setBackground(new Color(0x1B1B1B));
+            repoField.setForeground(MinecraftTheme.PANEL_TEXT);
+            repoField.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createMatteBorder(1, 1, 1, 1, MinecraftTheme.BORDER_LIGHT),
+                    new EmptyBorder(4, 6, 4, 6)));
+            refreshRepoField();
+
+            MinecraftButton pick = new MinecraftButton("Pick repo", CONTROL_FONT_SCALE);
+            pick.addActionListener(e -> pickRepo());
+
+            MinecraftLabel header = new MinecraftLabel("Git Sync", 4);
+            header.setSmallCaps(true);
+            MinecraftLabel note = new MinecraftLabel(
+                    "opped players can type !git pull (or !git pull reload) in chat to sync", 1);
+            note.setPixelColor(MinecraftTheme.TEXT_MUTED);
+            note.setShadow(false);
+            JPanel head = new JPanel();
+            head.setOpaque(false);
+            head.setLayout(new BoxLayout(head, BoxLayout.Y_AXIS));
+            head.add(header);
+            head.add(javax.swing.Box.createVerticalStrut(MinecraftTheme.scale(8)));
+            head.add(note);
+            head.setBorder(new EmptyBorder(0, 0, MinecraftTheme.scale(16), 0));
+
+            JPanel form = new JPanel(new GridBagLayout());
+            form.setOpaque(false);
+            GridBagConstraints g = new GridBagConstraints();
+            g.gridx = 0; g.gridy = 0;
+            g.anchor = GridBagConstraints.WEST;
+            g.fill = GridBagConstraints.HORIZONTAL;
+            g.insets = new Insets(0, 0, MinecraftTheme.scale(8), MinecraftTheme.scale(10));
+
+            MinecraftLabel enableLabel = new MinecraftLabel("Enable chat sync", 2);
+            enableLabel.setSmallCaps(true);
+            g.gridx = 0; g.weightx = 0;
+            form.add(enableLabel, g);
+            g.gridx = 1; g.weightx = 1;
+            form.add(enabledBox, g);
+            g.gridy++;
+
+            MinecraftLabel repoLabel = new MinecraftLabel("Repository", 2);
+            repoLabel.setSmallCaps(true);
+            g.gridx = 0; g.weightx = 0;
+            form.add(repoLabel, g);
+            g.gridx = 1; g.weightx = 1;
+            form.add(repoField, g);
+            g.gridx = 2; g.weightx = 0;
+            form.add(pick, g);
+
+            panel.add(head, BorderLayout.NORTH);
+            panel.add(form, BorderLayout.CENTER);
+        }
+
+        private void refreshRepoField() {
+            repoField.setText(selectedRepo == null ? "no folder selected" : selectedRepo.toString());
+        }
+
+        /** Walk the working directory (depth-limited) for a single {@code .git} folder. */
+        private Optional<Path> autoDetectRepo() {
+            Path root = config.workingDirectory();
+            if (!Files.isDirectory(root)) return Optional.empty();
+            try (java.util.stream.Stream<Path> stream = Files.walk(root, 4)) {
+                List<Path> repos = stream
+                        .filter(p -> p.getFileName() != null && ".git".equals(p.getFileName().toString()))
+                        .filter(Files::isDirectory)
+                        .map(Path::getParent)
+                        .toList();
+                return repos.size() == 1 ? Optional.of(repos.get(0)) : Optional.empty();
+            } catch (IOException ex) {
+                return Optional.empty();
+            }
+        }
+
+        private void pickRepo() {
+            JFileChooser chooser = new JFileChooser();
+            chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+            chooser.setDialogTitle("Select the git repository folder");
+            chooser.setCurrentDirectory((selectedRepo != null ? selectedRepo : config.workingDirectory()).toFile());
+            if (chooser.showOpenDialog(panel) != JFileChooser.APPROVE_OPTION) return;
+
+            Path chosen = chooser.getSelectedFile().toPath();
+            // Allow picking the .git folder itself.
+            if (".git".equals(chosen.getFileName().toString())) chosen = chosen.getParent();
+            if (chosen == null || !Files.isDirectory(chosen.resolve(".git"))) {
+                JOptionPane.showMessageDialog(panel,
+                        "That folder does not contain a .git directory.",
+                        "Not a git repository", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            selectedRepo = chosen.toAbsolutePath().normalize();
+            refreshRepoField();
+        }
+
+        @Override public String id() { return "gitsync"; }
+        @Override public String title() { return "Git Sync"; }
+        @Override public JComponent component() { return panel; }
+
+        @Override
+        public AppConfig apply(AppConfig current) {
+            boolean enabled = enabledBox.isSelected();
+            if (enabled) {
+                if (selectedRepo == null) {
+                    throw new IllegalArgumentException("Select a repository folder before enabling Git Sync.");
+                }
+                if (!Files.isDirectory(selectedRepo.resolve(".git"))) {
+                    throw new IllegalArgumentException("The selected folder no longer contains a .git directory.");
+                }
+            }
+            return current.saveGitSync(enabled, selectedRepo);
         }
     }
 

@@ -6,9 +6,11 @@ import com.servergui.model.HeapSample;
 import com.servergui.model.LogEntry;
 import com.servergui.model.LogEntry.Category;
 import com.servergui.model.LogEntry.Level;
+import com.servergui.service.GitSyncService;
 import com.servergui.service.ServerController;
 import com.servergui.service.ServerController.ServerStatus;
 import com.servergui.util.AnsiUtil;
+import com.servergui.util.OpsFile;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
@@ -65,9 +67,9 @@ public final class MainFrame extends JFrame {
     private static final int CONTROL_FONT_SCALE = 2;
     private static final double[] UI_ZOOM_STEPS = {0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0};
     private static final Pattern PLAYER_NAME_PATTERN = Pattern.compile("[A-Za-z0-9_]{3,16}");
-    private static final Pattern OPS_NAME_PATTERN = Pattern.compile("\"name\"\\s*:\\s*\"([A-Za-z0-9_]{3,16})\"");
 
     private final ServerController controller;
+    private final GitSyncService gitSync;
     private final LogTableModel logModel = new LogTableModel();
     private final DefaultListModel<String> playerModel = new DefaultListModel<>();
 
@@ -115,6 +117,8 @@ public final class MainFrame extends JFrame {
         super(config.appTitle());
         this.config = config;
         this.controller = new ServerController(config);
+        this.gitSync = new GitSyncService(controller);
+        gitSync.reconfigure(config);
         titleLabel.setMotd(resolveServerMotd(config));
         serverIconView.setIcon(loadServerIcon(config));
 
@@ -488,19 +492,7 @@ public final class MainFrame extends JFrame {
     }
 
     private boolean isPlayerOpped(String playerName) {
-        Path opsPath = config.workingDirectory().resolve("ops.json");
-        if (Files.notExists(opsPath)) return false;
-        try {
-            String ops = Files.readString(opsPath);
-            var matcher = OPS_NAME_PATTERN.matcher(ops);
-            while (matcher.find()) {
-                if (matcher.group(1).equalsIgnoreCase(playerName)) {
-                    return true;
-                }
-            }
-        } catch (IOException ignored) {
-        }
-        return false;
+        return OpsFile.isOpped(config.workingDirectory(), playerName);
     }
 
     private JSplitPane buildSplitPane(int orientation, Component first, Component second, double resizeWeight) {
@@ -540,12 +532,17 @@ public final class MainFrame extends JFrame {
         controller.onTps(value -> SwingUtilities.invokeLater(() -> tpsChart.addPoint(value, 20.0)));
         controller.onHeap(sample -> SwingUtilities.invokeLater(() -> updateHeap(sample)));
         controller.onStatus(status -> SwingUtilities.invokeLater(() -> updateStatus(status)));
+        controller.onChat(msg -> gitSync.handleChat(msg.player(), msg.text()));
 
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
                 controller.shutdown();
+                gitSync.shutdown();
                 dispose();
+                // Guarantee the JVM exits — lingering AWT/non-daemon threads
+                // otherwise leave orphaned wrapper processes behind.
+                System.exit(0);
             }
         });
     }
@@ -656,6 +653,7 @@ public final class MainFrame extends JFrame {
     void applySettings(AppConfig updatedConfig, boolean restartServer) {
         this.config = updatedConfig;
         controller.reconfigure(updatedConfig);
+        gitSync.reconfigure(updatedConfig);
         setTitle(updatedConfig.appTitle());
         refreshServerHeader();
         if (restartServer && controller.isRunning()) {

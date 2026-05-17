@@ -50,6 +50,7 @@ nohup java -Dsun.awt.X11.XWMClass=com-servergui-Main -jar "$JAR" &>/dev/null &
 - shows live logs, filters, command input, player list, TPS, and memory
 - includes mock mode when no supported server jar is found
 - lets you edit wrapper settings from the app
+- can sync a git repo when an opped player types `!git pull` in chat
 
 ## Usage
 
@@ -88,6 +89,23 @@ Important notes:
 - heap changes require a server restart to take effect
 - player/TPS polling works best on Paper-compatible servers
 - memory uses `jcmd` against the launched Java child process
+
+## Git Sync
+
+If you keep a datapack (or similar) in a git repository, the wrapper can pull updates
+on request from inside the game — no console or plugins needed.
+
+In the **Git Sync** settings tab, enable it and pick the repository folder (the one
+containing `.git`). After that, an **opped** player can type in chat:
+
+- `!git pull` — runs `git pull` on the repo
+- `!git pull reload` — pulls, then runs `/reload`
+
+Notes:
+
+- non-ops are ignored, and syncing is rate-limited to once per minute
+- `[Git]` status messages are whispered to online ops; full output goes to the console
+- `git pull` must work without prompts (public repo or cached credentials)
 
 ## Editing
 

@@ -34,6 +34,9 @@ public final class ServerController {
 
     public enum ServerStatus { OFFLINE, LOADING, ONLINE }
 
+    /** A chat message from a player, extracted from the server log. */
+    public record ChatMessage(String player, String text) {}
+
     private static final Pattern LIST_PATTERN  = Pattern.compile("There are \\d+ of a max of \\d+ players online:?\\s*(.*)");
     private static final Pattern JOIN_PATTERN  = Pattern.compile("([A-Za-z0-9_]{3,16}) joined the game");
     private static final Pattern LEAVE_PATTERN = Pattern.compile("([A-Za-z0-9_]{3,16}) left the game");
@@ -43,6 +46,8 @@ public final class ServerController {
     private static final Pattern BODY_PREFIX_PATTERN = Pattern.compile("^(?:\\[[^\\]]+/(?:TRACE|DEBUG|INFO|WARN|ERROR|FATAL)]\\s*:?[ ]*)+");
     // Matches player chat after stripping server thread prefixes
     private static final Pattern CHAT_PATTERN      = Pattern.compile("(?:^|\\s)<?[A-Za-z0-9_]{3,16}>\\s|^\\[Not Secure]\\s*<[A-Za-z0-9_]{3,16}>");
+    // Extracts the player name and message text from anywhere in a chat line body
+    private static final Pattern CHAT_EXTRACT      = Pattern.compile("<([A-Za-z0-9_]{3,16})>\\s*(.*)");
     // Matches player-issued /commands logged by the server
     private static final Pattern PLAYER_CMD_PATTERN = Pattern.compile("issued server command:");
     // Strip the [HH:MM:SS LEVEL]: prefix before category classification
@@ -61,6 +66,7 @@ public final class ServerController {
     private volatile Consumer<Double>        tpsListener    = v -> {};
     private volatile Consumer<HeapSample>    heapListener   = s -> {};
     private volatile Consumer<ServerStatus>  statusListener = s -> {};
+    private volatile Consumer<ChatMessage>   chatListener   = m -> {};
 
     private volatile Process       process;
     private volatile BufferedWriter processInput;
@@ -93,6 +99,23 @@ public final class ServerController {
     public void onTps(Consumer<Double> l)            { tpsListener    = l; }
     public void onHeap(Consumer<HeapSample> l)       { heapListener   = l; }
     public void onStatus(Consumer<ServerStatus> l)   { statusListener = l; }
+    public void onChat(Consumer<ChatMessage> l)      { chatListener   = l; }
+
+    /** Snapshot of the players currently known to be online. */
+    public List<String> onlinePlayers() {
+        return players.stream().sorted().toList();
+    }
+
+    /** Send a command to the server without echoing it to the console log. No-op in mock mode. */
+    public void sendBackground(String command) {
+        if (!running || command == null || command.isBlank() || config.mockMode()) return;
+        sendCommandRaw(command);
+    }
+
+    /** Push an externally-produced line into the console log. */
+    public void logExternal(Level level, Category category, String message) {
+        emitLog(level, category, message);
+    }
 
     // ── Lifecycle ──────────────────────────────────────────────────────────
 
@@ -217,7 +240,16 @@ public final class ServerController {
 
         Level level = classifyLevel(stripped, stderr);
         Category category = classifyCategory(stripped);
+        // Chat detection is independent of category classification — scan every line.
+        notifyChat(stripped);
         emitLog(level, category, line);  // pass raw (ANSI) line to UI
+    }
+
+    private void notifyChat(String stripped) {
+        Matcher m = CHAT_EXTRACT.matcher(stripped);
+        if (m.find()) {
+            chatListener.accept(new ChatMessage(m.group(1), m.group(2).trim()));
+        }
     }
 
     private boolean shouldSuppressPollResult(String line) {
