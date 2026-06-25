@@ -52,10 +52,11 @@ public final class ServerController {
     private static final Pattern PLAYER_CMD_PATTERN = Pattern.compile("issued server command:");
     // Strip the [HH:MM:SS LEVEL]: prefix before category classification
     private static final Pattern MC_HEADER_STRIP   = Pattern.compile("^\\[\\d{2}:\\d{2}:\\d{2} [A-Z]+]: ?");
-    // Lines that are purely the server's stdin prompt artifact — suppress them
+    // Lines that are purely the server's stdin prompt artifact - suppress them
     private static final Pattern JUNK_PATTERN      = Pattern.compile("^[>\\s]*$");
 
     private volatile AppConfig config;
+    private volatile boolean pollingEnabled = true;
     private final ScheduledExecutorService scheduler  = Executors.newScheduledThreadPool(4);
     private final ExecutorService           ioExecutor = Executors.newCachedThreadPool();
     private final Set<String>               players    = ConcurrentHashMap.newKeySet();
@@ -92,6 +93,17 @@ public final class ServerController {
 
     public boolean isRunning() {
         return running;
+    }
+
+    /** Disable the routine list/tps/heap pollers (used by headless git-only mode). */
+    public void setPollingEnabled(boolean enabled) {
+        pollingEnabled = enabled;
+    }
+
+    /** Best-effort, non-blocking kill of the launched server process (for shutdown hooks). */
+    public void destroyProcess() {
+        Process current = process;
+        if (current != null) current.destroyForcibly();
     }
 
     public void onLog(Consumer<LogEntry> l)          { logListener    = l; }
@@ -190,7 +202,7 @@ public final class ServerController {
         pollSilently(command);  // reuse mock/real dispatch, no second echo
     }
 
-    /** Scheduled-poller variant — sends without echoing to the console log. */
+    /** Scheduled-poller variant: sends without echoing to the console log. */
     private void pollSilently(String command) {
         if (!running) return;
         if ("list".equalsIgnoreCase(command)) pendingSilentPlayerPolls.incrementAndGet();
@@ -240,7 +252,7 @@ public final class ServerController {
 
         Level level = classifyLevel(stripped, stderr);
         Category category = classifyCategory(stripped);
-        // Chat detection is independent of category classification — scan every line.
+        // Chat detection is independent of category classification; scan every line.
         notifyChat(stripped);
         emitLog(level, category, line);  // pass raw (ANSI) line to UI
     }
@@ -325,14 +337,15 @@ public final class ServerController {
     }
 
     private void schedulePollers() {
+        if (!pollingEnabled) return;
         if (config.playerPollSeconds() > 0) {
             scheduledTasks.add(scheduler.scheduleAtFixedRate(
-                    () -> pollSilently("list"),   // no echo — routine poll
+                    () -> pollSilently("list"),   // no echo, routine poll
                     config.playerPollSeconds(), config.playerPollSeconds(), TimeUnit.SECONDS));
         }
         if (config.tpsPollSeconds() > 0) {
             scheduledTasks.add(scheduler.scheduleAtFixedRate(
-                    () -> pollSilently("tps"),    // no echo — routine poll
+                    () -> pollSilently("tps"),    // no echo, routine poll
                     config.tpsPollSeconds(), config.tpsPollSeconds(), TimeUnit.SECONDS));
         }
         if (config.heapPollSeconds() > 0) {

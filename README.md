@@ -1,26 +1,19 @@
 # Minecraft Server Console Wrapper
 
-`server-gui` is a desktop wrapper for an existing Minecraft server. Drop it into a normal server folder, launch it once, and it will detect common server jars, build the default launch command, and write `server-wrapper.properties` for you.
+`server-gui` is a desktop wrapper for an existing Minecraft server. Drop it into a server folder, launch it once, and it detects the server jar, builds the launch command, and writes `server-wrapper.properties`.
 
 ![Mock UI screenshot](docs/images/mock-ui.png)
 
-## Installation
+## Install
 
-1. Copy `server-gui-0.2.0.jar` from `target/` into your server folder.
+1. Copy `server-gui-0.3.0.jar` from `target/` into your server folder.
 2. Run it once:
 
 ```bash
-java -Dsun.awt.X11.XWMClass=com-servergui-Main -jar server-gui-0.2.0.jar
+java -Dsun.awt.X11.XWMClass=com-servergui-Main -jar server-gui-0.3.0.jar
 ```
 
-On first launch, the wrapper will:
-
-- detect common server jars
-- write `server-wrapper.properties`
-- create or overwrite `start.sh`
-- create or overwrite `start.bat`
-
-After that, you can launch it with the generated script:
+First launch detects the server jar, writes `server-wrapper.properties`, and creates `start.sh` and `start.bat`. After that, just run:
 
 ```bash
 ./start.sh
@@ -31,7 +24,7 @@ Generated `start.sh`:
 ```bash
 #!/bin/bash
 cd "$(dirname "$0")"
-JAR="$(ls server-gui*.jar 2>/dev/null | head -n 1)"
+JAR="$(ls server-gui*.jar 2>/dev/null | sort -V | tail -n 1)"
 if [ -z "$JAR" ]; then
   echo "server-gui jar not found."
   exit 1
@@ -39,35 +32,28 @@ fi
 nohup java -Dsun.awt.X11.XWMClass=com-servergui-Main -jar "$JAR" &>/dev/null &
 ```
 
+The script picks the newest `server-gui` jar, so leftover old versions are ignored.
+
 ## What It Does
 
-- wraps an existing Paper, Purpur, Spigot, or similarly named server jar
-- auto-detects common server jars on first launch
-- writes `server-wrapper.properties` automatically
-- creates launcher scripts automatically on first launch
+- wraps a Paper, Purpur, Spigot, or similarly named server jar
+- auto-detects the server jar on first launch, and re-detects it if the configured jar is renamed or updated
 - launches the server with `nogui`
-- provides a Minecraft-styled desktop console wrapper
 - shows live logs, filters, command input, player list, TPS, and memory
-- includes mock mode when no supported server jar is found
-- lets you edit wrapper settings from the app
-- can sync a git repo when an opped player types `!git pull` in chat
+- mock mode when no server jar is found
+- syncs a git repo from in-game chat (see Git Sync)
 
 ## Usage
 
-On first launch, the wrapper looks for a server jar in the same folder. If it finds something like `paper-...jar`, `purpur-...jar`, `spigot-...jar`, or `server.jar`, it fills in `server.command` automatically and disables mock mode.
+On first launch the wrapper looks for a server jar in the same folder (`paper-*.jar`, `purpur-*.jar`, `spigot-*.jar`, `server.jar`). If found, it fills in `server.command` and disables mock mode. If not, it stays in mock mode so you can test the UI safely.
 
-If no supported jar is found, the wrapper stays in mock mode so you can test the UI safely.
+To run without the GUI (for headless or remote servers), add `-nogui`:
 
-After the first run, you normally just launch the wrapper again with `./start.sh`.
+```bash
+java -jar server-gui-0.3.0.jar -nogui
+```
 
-On Linux, the app also writes a desktop entry after launch, so you may be able to start it from your application menu afterward. The script is still the simplest documented setup.
-
-## File Structure
-
-- `target/server-gui-0.2.0.jar`: packaged wrapper jar
-- `server-wrapper.properties`: generated wrapper config in the server folder
-- `start.sh`: generated Unix launcher script
-- `start.bat`: generated Windows launcher script
+With `-nogui` the wrapper launches the detected server jar, streams its output to the terminal, and forwards typed input to it, just like running the server jar directly. The GUI, polling, and player views are skipped; only the `!git` chat commands run in the background. Point an existing server CLI or wrapper at `server-gui.jar -nogui` in place of the paper jar and it keeps working as before, with git sync added.
 
 ## Configuration
 
@@ -83,50 +69,39 @@ poll.tps.seconds=30
 poll.heap.seconds=20
 ```
 
-Important notes:
+Notes:
 
 - keep `nogui` in `server.command`
-- heap changes require a server restart to take effect
+- heap changes need a server restart
 - player/TPS polling works best on Paper-compatible servers
-- memory uses `jcmd` against the launched Java child process
+- memory uses `jcmd` against the launched Java process
 
 ## Git Sync
 
-If you keep a datapack (or similar) in a git repository, the wrapper can pull updates
-on request from inside the game — no console or plugins needed.
+If you keep a datapack (or similar) in a git repo, the wrapper can pull updates from in-game chat. No console or plugins needed.
 
-In the **Git Sync** settings tab, enable it and pick the repository folder (the one
-containing `.git`). After that, an **opped** player can type in chat:
+In the Git Sync settings tab, enable it and pick the repo folder (the one containing `.git`). After that an opped player can type:
 
-- `!git pull` — runs `git pull` on the repo
-- `!git pull reload` — pulls, then runs `/reload`
+- `!git pull` pulls the active branch and reloads
+- `!git pull <branch>` switches to that branch and pulls it
+- `!git pull -silent` pulls without posting status in chat
+- `!git version [n]` shows the branch and the latest commit (or n commits, 1-20)
+- `!git help` lists these commands
 
 Notes:
 
-- non-ops are ignored, and syncing is rate-limited to once per minute
-- `[Git]` status messages are whispered to online ops; full output goes to the console
+- non-ops are ignored
+- pulls are rate-limited to 3 every 90 seconds
+- status, changed files, and commit info post to chat; full output goes to the console
 - `git pull` must work without prompts (public repo or cached credentials)
 
 ## Editing
 
-Most users should edit settings from the app’s settings dialog instead of editing the config file directly.
-
-Direct file editing is still fine if you want to:
-
-- rename the window
-- change polling intervals
-- adjust `-Xms` and `-Xmx`
-- point the wrapper at a different launch command
+Edit settings from the app instead of the config file when you can. Direct edits are fine to rename the window, change polling intervals, adjust `-Xms`/`-Xmx`, or point at a different launch command.
 
 ## Contributing
 
-- keep changes focused
-- prefer small, reviewable commits
+- keep changes focused and commits small
 - preserve user files and existing server folders
-- test with both mock mode and a real detected server jar when possible
-
-## Committing
-
-- do not commit generated server-folder files unless intentionally updating an example
-- commit source, resources, and README changes only
-- keep packaged jars out of normal source commits unless you are intentionally publishing a build
+- test with both mock mode and a real server jar
+- commit source, resources, and README changes; keep packaged jars out of normal commits

@@ -18,6 +18,11 @@ public final class Main {
     private Main() {}
 
     public static void main(String[] args) {
+        if (hasFlag(args, "-nogui")) {
+            AppConfig config = AppConfig.load(Path.of(".").toAbsolutePath().normalize());
+            new HeadlessRunner(config).run();
+            return;
+        }
         if (relaunchWithWindowClassIfNeeded(args)) return;
         System.setProperty("sun.awt.X11.XWMClass", LinuxDesktopIntegration.WM_CLASS);
         AppConfig config = AppConfig.load(Path.of(".").toAbsolutePath().normalize());
@@ -28,6 +33,13 @@ public final class Main {
             frame.setVisible(true);
             frame.autoStart();
         });
+    }
+
+    private static boolean hasFlag(String[] args, String flag) {
+        for (String arg : args) {
+            if (flag.equalsIgnoreCase(arg)) return true;
+        }
+        return false;
     }
 
     private static boolean relaunchWithWindowClassIfNeeded(String[] args) {

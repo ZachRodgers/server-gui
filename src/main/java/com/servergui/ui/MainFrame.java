@@ -540,7 +540,7 @@ public final class MainFrame extends JFrame {
                 controller.shutdown();
                 gitSync.shutdown();
                 dispose();
-                // Guarantee the JVM exits — lingering AWT/non-daemon threads
+                // Guarantee the JVM exits; lingering AWT/non-daemon threads
                 // otherwise leave orphaned wrapper processes behind.
                 System.exit(0);
             }

@@ -7,7 +7,7 @@ public record LogEntry(LocalTime time, Level level, Category category, String me
     public enum Level    { INFO, WARN, ERROR }
     public enum Category { SYSTEM, CHAT, COMMAND }
 
-    /** Convenience constructor — defaults category to SYSTEM. */
+    /** Convenience constructor: defaults category to SYSTEM. */
     public LogEntry(LocalTime time, Level level, String message) {
         this(time, level, Category.SYSTEM, message);
     }

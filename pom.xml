@@ -5,7 +5,7 @@
 
     <groupId>com.servergui</groupId>
     <artifactId>server-gui</artifactId>
-    <version>0.2.0</version>
+    <version>0.3.0</version>
     <name>server-gui</name>
 
     <properties>

@@ -52,6 +52,10 @@ public record AppConfig(
         boolean gitSyncEnabled = Boolean.parseBoolean(properties.getProperty("git.sync.enabled", "false"));
         String gitRepository  = properties.getProperty("git.repository", "");
 
+        if (!mockMode) {
+            serverCommand = reconcileServerJar(workingDirectory, configPath, serverCommand);
+        }
+
         return new AppConfig(normalizedBaseDirectory, appTitle, mockMode, serverCommand, workingDirectory,
                 playerPollSeconds, tpsPollSeconds, heapPollSeconds, gitSyncEnabled, gitRepository);
     }
@@ -219,6 +223,113 @@ public record AppConfig(
         }
     }
 
+    /**
+     * If the jar named in {@code server.command} is missing from the working directory,
+     * find an updated replacement (same name family preferred, newest version) and rewrite
+     * the command in {@code server-wrapper.properties}. Returns the command to use.
+     */
+    private static String reconcileServerJar(Path workingDirectory, Path configPath, String serverCommand) {
+        Optional<String> configured = jarFromCommand(serverCommand);
+        if (configured.isEmpty()) return serverCommand;
+        String jarName = configured.get();
+        if (Files.exists(workingDirectory.resolve(jarName))) return serverCommand;
+
+        Optional<String> replacement = findReplacementJar(workingDirectory, jarName);
+        if (replacement.isEmpty() || replacement.get().equals(jarName)) return serverCommand;
+
+        String updated = replaceJarToken(serverCommand, jarName, replacement.get());
+        persistServerCommand(configPath, updated);
+        return updated;
+    }
+
+    private static Optional<String> jarFromCommand(String command) {
+        List<String> tokens = CommandTokenizer.tokenize(command);
+        for (int i = 0; i < tokens.size() - 1; i++) {
+            if (tokens.get(i).equals("-jar")) return Optional.of(tokens.get(i + 1));
+        }
+        return Optional.empty();
+    }
+
+    private static Optional<String> findReplacementJar(Path directory, String missingJar) {
+        String family = jarFamily(missingJar);
+        if (!family.isBlank()) {
+            try (Stream<Path> files = Files.list(directory)) {
+                Optional<String> sameFamily = files
+                        .filter(Files::isRegularFile)
+                        .map(path -> path.getFileName().toString())
+                        .filter(name -> name.toLowerCase(Locale.ROOT).endsWith(".jar"))
+                        .filter(name -> name.toLowerCase(Locale.ROOT).startsWith(family))
+                        .max(AppConfig::compareNatural);
+                if (sameFamily.isPresent()) return sameFamily;
+            } catch (IOException ignored) {
+                return Optional.empty();
+            }
+        }
+        return detectServerJar(directory);
+    }
+
+    /** Leading run of letters in a jar name, e.g. {@code paper} from {@code paper-1.21.10-130.jar}. */
+    private static String jarFamily(String jarName) {
+        String lower = jarName.toLowerCase(Locale.ROOT);
+        int i = 0;
+        while (i < lower.length() && Character.isLetter(lower.charAt(i))) i++;
+        return lower.substring(0, i);
+    }
+
+    /** Natural ("version-aware") comparison so e.g. paper-1.21.10 sorts above paper-1.21.9. */
+    private static int compareNatural(String a, String b) {
+        int i = 0;
+        int j = 0;
+        while (i < a.length() && j < b.length()) {
+            char ca = a.charAt(i);
+            char cb = b.charAt(j);
+            if (Character.isDigit(ca) && Character.isDigit(cb)) {
+                int si = i;
+                int sj = j;
+                while (i < a.length() && Character.isDigit(a.charAt(i))) i++;
+                while (j < b.length() && Character.isDigit(b.charAt(j))) j++;
+                String na = a.substring(si, i).replaceFirst("^0+(?=\\d)", "");
+                String nb = b.substring(sj, j).replaceFirst("^0+(?=\\d)", "");
+                if (na.length() != nb.length()) return na.length() - nb.length();
+                int cmp = na.compareTo(nb);
+                if (cmp != 0) return cmp;
+            } else {
+                int cmp = Character.compare(Character.toLowerCase(ca), Character.toLowerCase(cb));
+                if (cmp != 0) return cmp;
+                i++;
+                j++;
+            }
+        }
+        return (a.length() - i) - (b.length() - j);
+    }
+
+    private static String replaceJarToken(String command, String oldJar, String newJar) {
+        List<String> tokens = CommandTokenizer.tokenize(command);
+        for (int i = 0; i < tokens.size(); i++) {
+            if (tokens.get(i).equals(oldJar)) {
+                tokens.set(i, newJar);
+                break;
+            }
+        }
+        return joinTokens(tokens);
+    }
+
+    private static void persistServerCommand(Path configPath, String command) {
+        Properties properties = new Properties();
+        if (Files.exists(configPath)) {
+            try (InputStream inputStream = Files.newInputStream(configPath)) {
+                properties.load(inputStream);
+            } catch (IOException ignored) {
+                return;
+            }
+        }
+        properties.setProperty("server.command", command);
+        try (OutputStream outputStream = Files.newOutputStream(configPath)) {
+            properties.store(outputStream, "Minecraft server GUI configuration.");
+        } catch (IOException ignored) {
+        }
+    }
+
     private static Optional<String> detectServerJar(Path baseDirectory) {
         if (baseDirectory == null || Files.notExists(baseDirectory)) {
             return Optional.empty();
@@ -285,7 +396,7 @@ public record AppConfig(
         return """
                 #!/bin/bash
                 cd "$(dirname "$0")"
-                JAR="$(ls server-gui*.jar 2>/dev/null | head -n 1)"
+                JAR="$(ls server-gui*.jar 2>/dev/null | sort -V | tail -n 1)"
                 if [ -z "$JAR" ]; then
                   echo "server-gui jar not found."
                   exit 1
@@ -298,7 +409,7 @@ public record AppConfig(
         return """
                 @echo off
                 cd /d "%~dp0"
-                for %%f in (server-gui*.jar) do (
+                for /f "delims=" %%f in ('dir /b /o-n server-gui*.jar 2^>nul') do (
                   start "" javaw -jar "%%f"
                   goto :eof
                 )
